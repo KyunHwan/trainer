@@ -1,0 +1,17 @@
+defaults:
+  - baseline.yaml
+
+run:
+  name: sgd_step_lr
+
+optimizer:
+  _type_: optim_factory.torch
+  type: optim_cls.SGD
+  kwargs: {lr: 1.0e-2, momentum: 0.9}
+
+scheduler:
+  _type_: sched_factory.torch
+  type: sched_cls.StepLR
+  kwargs: {step_size: 1, gamma: 0.8}
+  interval: epoch
+

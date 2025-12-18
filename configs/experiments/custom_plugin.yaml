@@ -1,0 +1,26 @@
+defaults:
+  - ../base/runtime.yaml
+  - ../models/sequential_mlp.yaml
+
+imports:
+  - extensions.example_plugin
+
+run:
+  name: custom_plugin
+  out_dir: runs/${run.name}
+
+data:
+  _merge_: replace
+  _value_:
+    _type_: data.constant_regression
+    batch_size: 16
+    steps_per_epoch: 10
+    x_shape: [32]
+    y_shape: [16]
+
+trainer:
+  _merge_: replace
+  _value_:
+    _type_: trainer.verbose
+    max_epochs: 1
+    log_every_n_steps: 5
