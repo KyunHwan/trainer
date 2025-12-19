@@ -1,36 +1,37 @@
+"""Optimizer factory interface and built-ins."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Iterable, Protocol, runtime_checkable
 
 import torch
+from torch import nn
 
-from offline_trainer.deps.model_constructor import ConfigError, Registry, validate_kwargs
+
+@runtime_checkable
+class OptimizerFactory(Protocol):
+    """Builds optimizers for a parameter iterable."""
+
+    def build(self, params: Iterable[nn.Parameter]) -> torch.optim.Optimizer: ...
 
 
 @dataclass
-class TorchOptimizerFactory:
-    type: str
-    args: list[Any] | None = None
-    kwargs: dict[str, Any] | None = None
+class AdamWFactory:
+    lr: float = 1e-3
+    weight_decay: float = 0.0
+    betas: tuple[float, float] = (0.9, 0.999)
 
-    def build(self, model: torch.nn.Module, *, registry: Registry) -> torch.optim.Optimizer:
-        if not isinstance(self.type, str) or not self.type:
-            raise ConfigError("optimizer.type must be a non-empty string", config_path=("optimizer", "type"))
-        if self.args is None:
-            args = []
-        else:
-            args = list(self.args)
-        if self.kwargs is None:
-            kwargs = {}
-        else:
-            kwargs = dict(self.kwargs)
+    def build(self, params: Iterable[nn.Parameter]) -> torch.optim.Optimizer:
+        return torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay, betas=self.betas)
 
-        entry = registry.get_module(self.type, config_path=("optimizer", "type"))
-        optim_cls = entry.target
-        validate_kwargs(optim_cls, kwargs=kwargs, policy=entry.signature_policy, config_path=("optimizer", "kwargs"))
-        try:
-            return optim_cls(model.parameters(), *args, **kwargs)
-        except Exception as exc:
-            raise ConfigError(f"Failed to construct optimizer: {exc}", config_path=("optimizer",)) from exc
 
+@dataclass
+class SGDFactory:
+    lr: float = 1e-2
+    momentum: float = 0.0
+    weight_decay: float = 0.0
+
+    def build(self, params: Iterable[nn.Parameter]) -> torch.optim.Optimizer:
+        return torch.optim.SGD(
+            params, lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay
+        )

@@ -1,0 +1,18 @@
+plugins:
+  - "experiments.extensions.custom_trainer"
+  - "experiments.extensions.custom_data"
+model:
+  config_path: "policy_constructor/configs/experiments/sequential_mlp.yaml"
+data:
+  datamodule:
+    type: "custom_data_v1"
+    params:
+      batch_size: 4
+      dataset_size: 16
+train:
+  model_input: "x"
+  trainer:
+    type: "custom_trainer_v1"
+    params: {}
+  max_steps: 2
+  max_epochs: 1

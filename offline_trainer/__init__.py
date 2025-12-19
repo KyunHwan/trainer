@@ -1,6 +1,4 @@
-from __future__ import annotations
+"""Offline Trainer package."""
+from offline_trainer.api import train
 
-from .run import run_experiment
-
-__all__ = ["run_experiment"]
-
+__all__ = ["train"]

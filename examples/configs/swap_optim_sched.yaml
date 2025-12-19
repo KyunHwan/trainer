@@ -1,0 +1,16 @@
+model:
+  config_path: "policy_constructor/configs/examples/sequential_mlp.yaml"
+train:
+  model_input: "x"
+  max_steps: 2
+  max_epochs: 1
+  optimizer:
+    type: "sgd"
+    params:
+      lr: 0.01
+      momentum: 0.9
+  scheduler:
+    type: "step_lr"
+    params:
+      step_size: 1
+      gamma: 0.9

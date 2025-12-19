@@ -1,22 +1,34 @@
+"""Logger interface and built-ins."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class Logger(Protocol):
+    """Minimal logger interface."""
+
+    def log(self, metrics: dict[str, Any], step: int) -> None: ...
+
+    def flush(self) -> None: ...
 
 
 @dataclass
 class StdoutLogger:
-    every_n_steps: int = 50
+    prefix: str = "train"
 
-    def log_hparams(self, hparams: dict[str, Any]) -> None:
-        return
+    def log(self, metrics: dict[str, Any], step: int) -> None:
+        parts = ", ".join(f"{k}={v:.6f}" if isinstance(v, float) else f"{k}={v}" for k, v in metrics.items())
+        print(f"[{self.prefix}] step={step} {parts}")
 
-    def log_metrics(self, metrics: dict[str, float], *, step: int, stage: str) -> None:
-        if self.every_n_steps and step % self.every_n_steps != 0:
-            return
-        keys = ", ".join(f"{k}={v:.6g}" for k, v in sorted(metrics.items()))
-        print(f"[{stage}] step={step} {keys}")
+    def flush(self) -> None:
+        return None
 
-    def close(self) -> None:
-        return
 
+class NoOpLogger:
+    def log(self, metrics: dict[str, Any], step: int) -> None:  # noqa: ARG002
+        return None
+
+    def flush(self) -> None:
+        return None

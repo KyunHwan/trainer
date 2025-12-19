@@ -1,14 +1,10 @@
-from __future__ import annotations
-
+import os
 import sys
-from pathlib import Path
 
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
-def pytest_configure() -> None:
-    root = Path(__file__).resolve().parents[1]
-    policy_constructor = root / "policy_constructor"
-
-    for p in (root, policy_constructor):
-        if p.exists() and str(p) not in sys.path:
-            sys.path.insert(0, str(p))
-
+POLICY = os.path.join(ROOT, "policy_constructor")
+if POLICY not in sys.path:
+    sys.path.insert(0, POLICY)

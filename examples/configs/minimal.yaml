@@ -1,0 +1,6 @@
+model:
+  config_path: "policy_constructor/configs/experiments/sequential_mlp.yaml"
+train:
+  model_input: "x"
+  max_steps: 2
+  max_epochs: 1
