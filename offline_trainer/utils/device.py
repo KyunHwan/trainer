@@ -20,7 +20,10 @@ def move_to_device(batch: Any, device: torch.device) -> Any:
 
     def _move(x: Any) -> Any:
         if isinstance(x, torch.Tensor):
-            return x.to(device)
+            if x.device != device:
+                return x.to(device)
+            else:
+                return x
         return x
 
     return tree_map(_move, batch)
