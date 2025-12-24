@@ -1,0 +1,182 @@
+{
+  "robot_id": "packy",
+  "task_name": "inbox",
+  "data_collection_method": "old",
+  "data_collector": "kimdonggun",
+  "object_idx": 15,
+  "object_num": -1,
+  "HZ": 20,
+  "episode_len": 2000,
+  "compression": 0.5,
+  "image_resize": {
+      "width": 640,
+      "height": 240
+  },
+  "episode_index": 456,
+  "data_collection_error": false,
+  "table_height": 0.85,
+  "using_hand": "left",
+  "body_angle": 0.0,
+  "data_dict": {
+    "/observation/xpos/left": [],
+    "/observation/quaternion/left": [],
+    "/observation/xpos/right": [],
+    "/observation/quaternion/right": [],
+    "/observation/hand_joint_pos/left": [],
+    "/observation/hand_joint_pos/right": [],
+    "/observation/hand_joint_cur/left": [],
+    "/observation/hand_joint_cur/right": [],
+    "/observation/joint_pos/left": [],
+    "/observation/joint_pos/right": [],
+    "/observation/joint_cur/left": [],
+    "/observation/joint_cur/right": [],
+    "/observation/images/head": [],
+    "/observation/images/left": [],
+    "/observation/images/right": [],
+    "/action/joint_pos/left": [],
+    "/action/joint_pos/right": [],
+    "/action/hand_joint_pos/left": [],
+    "/action/hand_joint_pos/right": [],
+    "/prompts/masks/head_camera": [],
+    "/metadata/operator": "",
+    "/metadata/date": "",
+    "/metadata/edited_date": "",
+    "/metadata/compress": false,
+    "/metadata/data_collection_error": false,
+    "/metadata/data_collection_method": "",
+    "/metadata/robot_type": "",
+    "/metadata/HZ": 0,
+    "/labels/task_done": [],
+    "/labels/status": [],
+    "/labels/rewards": [],
+    "/metadata/head_pos/pan": 0,
+    "/metadata/head_pos/tilt": 0,
+    "/metadata/labels": {}
+  },
+  "topics": {
+    "left_pose": {
+      "topic": "/igris_b/packy/left_pose_state",
+      "msg_type": "PoseStamped",
+      "fields": {
+        "/observation/xpos/left": "pose.position",
+        "/observation/quaternion/left": "pose.orientation"
+      }
+    },
+    "right_pose": {
+      "topic": "/igris_b/packy/right_pose_state",
+      "msg_type": "PoseStamped",
+      "fields": {
+        "/observation/xpos/right": "pose.position",
+        "/observation/quaternion/right": "pose.orientation"
+      }
+    },
+    "finger": {
+      "topic": "/igris_b/packy/finger_state",
+      "msg_type": "Float32MultiArray",
+      "fields": {
+        "/observation/hand_joint_pos/left": {
+          "slice": [
+            6,
+            12
+          ]
+        },
+        "/observation/hand_joint_pos/right": {
+          "slice": [
+            0,
+            6
+          ]
+        }
+      }
+    },
+    "finger_current": {
+      "topic": "/igris_b/packy/finger_current",
+      "msg_type": "Float32MultiArray",
+      "fields": {
+        "/observation/hand_joint_cur/left": {
+          "slice": [
+            6,
+            12
+          ]
+        },
+        "/observation/hand_joint_cur/right": {
+          "slice": [
+            0,
+            6
+          ]
+        }
+      }
+    },
+    "joints": {
+      "topic": "/igris_b/packy/joint_states",
+      "msg_type": "JointState",
+      "fields": {
+        "/observation/joint_pos/left": {
+          "slice": [
+            6,
+            12
+          ],
+          "attr": "position"
+        },
+        "/observation/joint_pos/right": {
+          "slice": [
+            0,
+            6
+          ],
+          "attr": "position"
+        },
+        "/observation/joint_cur/left": {
+          "slice": [
+            6,
+            12
+          ],
+          "attr": "effort"
+        },
+        "/observation/joint_cur/right": {
+          "slice": [
+            0,
+            6
+          ],
+          "attr": "effort"
+        }
+      }
+    },
+    "action_joints": {
+      "topic": "/igris_b/packy/target_joints",
+      "msg_type": "JointState",
+      "fields": {
+        "/action/joint_pos/left": {
+          "slice": [
+            6,
+            12
+          ],
+          "attr": "position"
+        },
+        "/action/joint_pos/right": {
+          "slice": [
+            0,
+            6
+          ],
+          "attr": "position"
+        }
+      }
+    },
+    "action_fingers": {
+      "topic": "/igris_b/packy/finger_target",
+      "msg_type": "Float32MultiArray",
+      "fields": {
+        "/action/hand_joint_pos/left": {
+          "slice": [
+            6,
+            12
+          ]
+        },
+        "/action/hand_joint_pos/right": {
+          "slice": [
+            0,
+            6
+          ]
+        }
+      }
+    }
+  }
+}

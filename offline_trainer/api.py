@@ -234,7 +234,7 @@ def train(config_path: str) -> None:
     load_plugins(config.plugins)
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
-    enable_dist_train = world_size > 1 and dist.is_available() and torch.cuda.is_available()
+    enable_dist_train = world_size > 1 and torch.cuda.is_available() and dist.is_available() 
 
     if enable_dist_train and torch.cuda.is_available():
         assert "LOCAL_RANK" in os.environ, "LOCAL_RANK missing; launch with torchrun."
