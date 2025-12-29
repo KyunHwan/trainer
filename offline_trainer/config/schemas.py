@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError, field_validator, model_validator
 
 from offline_trainer.config.errors import ConfigError, ConfigValidationIssue
 
@@ -11,7 +11,7 @@ from offline_trainer.config.errors import ConfigError, ConfigValidationIssue
 class ComponentSpec(BaseModel):
     """Common YAML component spec: {type, params}."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     type: str
     params: dict[str, Any] = Field(default_factory=dict)
@@ -45,28 +45,35 @@ class OptimizerSpec(ComponentSpec):
     params: OptimizerParams = Field(default_factory=OptimizerParams)
 
 
-class ModelConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    config_path: str | None = None
-    config: dict[str, Any] | None = None
+class ComponentConfigPaths(RootModel[dict[str, str]]):
+    """Mapping of component names to config file paths."""
 
     @model_validator(mode="after")
-    def _validate_exactly_one(self) -> "ModelConfig":
-        if (self.config_path is None) == (self.config is None):
-            raise ValueError("Provide exactly one of config_path or config")
+    def _validate_entries(self) -> "ComponentConfigPaths":
+        if not self.root:
+            raise ValueError("component_config_paths must contain at least one entry")
+        for name, path in self.root.items():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("component_config_paths keys must be non-empty strings")
+            if not isinstance(path, str) or not path.strip():
+                raise ValueError("component_config_paths values must be non-empty strings")
         return self
 
-    def as_dict(self) -> dict[str, Any]:
-        if self.config_path is not None:
-            return {"config_path": self.config_path}
-        return {"config": self.config}
+    def as_dict(self) -> dict[str, str]:
+        return dict(self.root)
+
+
+class ModelConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    find_unused_parameters: bool
+    component_config_paths: ComponentConfigPaths
 
 
 class DataConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
-    datamodule: ComponentSpec = Field(default_factory=lambda: ComponentSpec(type="random_regression"))
+    datamodule: ComponentSpec
 
 
 class EMAConfig(BaseModel):
@@ -100,16 +107,12 @@ class CheckpointConfig(BaseModel):
 
 
 class TrainConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
-    trainer: ComponentSpec = Field(default_factory=lambda: ComponentSpec(type="default_trainer"))
-    optimizer: OptimizerSpec = Field(
-        default_factory=lambda: OptimizerSpec(type="adamw", params=OptimizerParams(lr=1e-3))
-    )
+    trainer: ComponentSpec
+    optimizer: OptimizerSpec
     scheduler: ComponentSpec = Field(default_factory=lambda: ComponentSpec(type="none"))
-    loss: ComponentSpec = Field(
-        default_factory=lambda: ComponentSpec(type="mse", params={"target_key": "y"})
-    )
+    loss: ComponentSpec
     metrics: list[ComponentSpec] = Field(default_factory=list)
     callbacks: list[ComponentSpec] = Field(default_factory=list)
     loggers: list[ComponentSpec] = Field(default_factory=lambda: [ComponentSpec(type="noop")])
@@ -162,16 +165,16 @@ class TrainConfig(BaseModel):
 
 
 class ExperimentConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
-    plugins: list[str] = Field(default_factory=list)
+    plugins: list[str]
     seed: int | None = 123
     deterministic: bool = False
     device: str = "auto"
 
     model: ModelConfig
-    data: DataConfig = Field(default_factory=DataConfig)
-    train: TrainConfig = Field(default_factory=TrainConfig)
+    data: DataConfig
+    train: TrainConfig
 
 
 def validate_config(raw: dict[str, Any]) -> ExperimentConfig:

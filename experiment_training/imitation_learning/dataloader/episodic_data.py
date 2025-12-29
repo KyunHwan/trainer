@@ -3,18 +3,130 @@
 
 import numpy as np
 import torch
+import einops
 import h5py
 import cv2
 from torch.utils.data import Dataset
 from scipy.spatial.transform import Rotation
 from .utils.utils import *
+from typing import Any
+from .utils.config_loader import ConfigLoader
 
-# Set multiprocessing sharing strategy to avoid file descriptor issues
-# torch.multiprocessing.set_sharing_strategy('file_system')
+from pathlib import Path
+
+from offline_trainer.registry import DATASET_BUILDER_REGISTRY
+
+from typing import Any
 
 import IPython
 
 e = IPython.embed
+
+@DATASET_BUILDER_REGISTRY.register('episodic_dataset_factory')
+class EpisodicDatasetFactory:
+    def build(self, params) -> dict[str, Any]:
+        raw_path = os.path.join(params['task_config_path'], f"{params['task_name']}.json")
+        file_path = Path(raw_path).expanduser()
+        config_loader = ConfigLoader(file_path)
+        camera_names = config_loader.get_camera_names()
+        
+        dataset, norm_stats = load_data(
+            dataset_dir_l=Path(params['dataset_dir_l']).expanduser(),
+            camera_names=camera_names,
+            chunk_size=params['chunk_size'],
+            robot_obs_size=params['robot_obs_size'],
+            img_obs_size=params['img_obs_size'],
+            skip_mirrored_data=params['skip_mirrored_data'],
+            config_loader=config_loader)
+        
+        return {"dataset": dataset, 
+                "norm_stats": norm_stats}
+
+
+
+def load_data(
+    dataset_dir_l,
+    camera_names,
+    chunk_size=40,
+    robot_obs_size=40,
+    img_obs_size=1,
+    skip_mirrored_data=False,
+    config_loader=None,
+):
+    print(f'Finding all hdf5 files in {dataset_dir_l}')
+    if isinstance(dataset_dir_l, (str, Path)):
+        dataset_dir_l = [dataset_dir_l]
+    if type(dataset_dir_l) == str:
+        dataset_dir_l = [dataset_dir_l]
+    dataset_path_list_list = [
+        find_all_hdf5(dataset_dir, skip_mirrored_data) for dataset_dir in dataset_dir_l
+    ]
+
+    num_episodes_0 = len(dataset_path_list_list[0])
+    dataset_path_list = flatten_list(dataset_path_list_list)
+
+    num_episodes_l = [len(dataset_path_list) for dataset_path_list in dataset_path_list_list]
+
+    num_episodes_cumsum = np.cumsum(num_episodes_l)
+
+    # if episode num is -1 use every episode. if not, use sepcified number of episodes
+    num_episodes_l = [len(lst) for lst in dataset_path_list_list]
+
+    num_episodes_cumsum = np.cumsum(num_episodes_l)
+    num_episodes_0 = num_episodes_l[0]     
+
+    shuffled_episode_ids_0 = np.random.permutation(num_episodes_0)
+    train_episode_ids_0 = shuffled_episode_ids_0[: int(num_episodes_0)]
+    train_episode_ids_l = [train_episode_ids_0] + [
+        np.arange(num_episodes) + num_episodes_cumsum[idx]
+        for idx, num_episodes in enumerate(num_episodes_l[1:])
+    ]
+    train_episode_ids = np.concatenate(train_episode_ids_l)
+
+    all_episode_len = get_episode_len(dataset_path_list)
+    
+    train_episode_len_l = [
+        [all_episode_len[i] for i in train_episode_ids]
+        for train_episode_ids in train_episode_ids_l
+    ]
+    
+    train_episode_len = flatten_list(train_episode_len_l)
+
+    norm_stats = {
+        "action_mean": None,
+        "action_std": None,  # avoid divide by zero
+        "state_mean": None,
+        "state_std": None,
+    }
+    
+    dataset_wo_norm_stats = EpisodicDataset(
+        dataset_path_list,
+        camera_names,
+        norm_stats,
+        train_episode_ids,
+        train_episode_len,
+        chunk_size,
+        robot_obs_size,
+        img_obs_size,
+        no_image_mode= True,
+        config_loader=config_loader
+    )
+
+    norm_stats, _ = compute_norm_stats(dataset_wo_norm_stats)
+
+    dataset = EpisodicDataset(
+        dataset_path_list,
+        camera_names,
+        norm_stats,
+        train_episode_ids,
+        train_episode_len,
+        chunk_size,
+        robot_obs_size,
+        img_obs_size,
+        config_loader=config_loader
+    )
+
+    return dataset, norm_stats
 
 class EpisodicDataset(Dataset):
     def __init__(
@@ -91,8 +203,8 @@ class EpisodicDataset(Dataset):
                     # Load joint and finger positions
                     action_joint_left = root["/action/joint_pos/left"][()]
                     action_joint_right = root["/action/joint_pos/right"][()]
-                    action_finger_left = root["/action/finger_pos/left"][()]
-                    action_finger_right = root["/action/finger_pos/right"][()]
+                    action_finger_left = root["/action/hand_joint_pos/left"][()]
+                    action_finger_right = root["/action/hand_joint_pos/right"][()]
                     
                     data_len = action_joint_left.shape[0]
                     
@@ -243,10 +355,20 @@ class EpisodicDataset(Dataset):
                                     decompressed_image_array.append(decompressed_image)
                                 image_dict[cam_name] = np.array(decompressed_image_array)
                         
-                        all_cam_images = []
+                        image_data_dict = {}
+                        #all_cam_images = []
                         for cam_name in self.camera_names:
-                            all_cam_images.append(image_dict[cam_name])
-                        all_cam_images = np.stack(all_cam_images, axis=0)
+                            #all_cam_images.append(image_dict[cam_name])
+                            img = torch.from_numpy(image_dict[cam_name])
+                            
+                            if img.shape[0] != 1 or img.shape[1] == 1:
+                                raise ValueError("Img shape in EpisodicDataset is not correct!")
+                            image_data_dict[cam_name] = einops.rearrange(
+                                                                img.squeeze(), 
+                                                                'h w c -> c h w'
+                            )
+
+                        #all_cam_images = np.stack(all_cam_images, axis=0)
 
                     
                     # Convert to torch tensors
@@ -254,9 +376,10 @@ class EpisodicDataset(Dataset):
                     robot_state_data = torch.from_numpy(np.array(robot_state_np)).float()
                     is_pad = torch.from_numpy(is_pad).bool()
                     
-                    if not self.no_image_mode:
-                        image_data = torch.from_numpy(np.array(all_cam_images))
-                        image_data = torch.einsum("k t h w c -> k t c h w", image_data)
+                    # if not self.no_image_mode:
+                    #     image_data = torch.from_numpy(np.array(all_cam_images))
+                    #     image_data = torch.einsum("k t h w c -> k t c h w", image_data)
+                        
                     
                     # Normalize robot state and action data
                     if self.norm_stats["action_mean"] is not None and self.norm_stats["action_std"] is not None:
@@ -285,99 +408,17 @@ class EpisodicDataset(Dataset):
                     raise RuntimeError(f"Failed to load any episode after {max_retries} attempts")
             
         if not self.no_image_mode:
-            return image_data, robot_state_data, action_data, is_pad
+            data_dict = {
+                'images': image_data_dict,
+                'proprio': robot_state_data,
+                'action': action_data,
+                'is_pad': is_pad
+            }
+            return data_dict
         else:
-            return robot_state_data, action_data, is_pad
-
-
-
-
-
-
-
-
-
-
-
-
-def load_data(
-    dataset_dir_l,
-    camera_names,
-    chunk_size=40,
-    robot_obs_size=40,
-    img_obs_size=1,
-    skip_mirrored_data=False,
-    config_loader=None,
-):
-    print(f'Finding all hdf5 files in {dataset_dir_l}')
-    if type(dataset_dir_l) == str:
-        dataset_dir_l = [dataset_dir_l]
-    dataset_path_list_list = [
-        find_all_hdf5(dataset_dir, skip_mirrored_data) for dataset_dir in dataset_dir_l
-    ]
-
-    num_episodes_0 = len(dataset_path_list_list[0])
-    dataset_path_list = flatten_list(dataset_path_list_list)
-
-    num_episodes_l = [len(dataset_path_list) for dataset_path_list in dataset_path_list_list]
-
-    num_episodes_cumsum = np.cumsum(num_episodes_l)
-
-    # if episode num is -1 use every episode. if not, use sepcified number of episodes
-    num_episodes_l = [len(lst) for lst in dataset_path_list_list]
-
-    num_episodes_cumsum = np.cumsum(num_episodes_l)
-    num_episodes_0 = num_episodes_l[0]     
-
-    shuffled_episode_ids_0 = np.random.permutation(num_episodes_0)
-    train_episode_ids_0 = shuffled_episode_ids_0[: int(num_episodes_0)]
-    train_episode_ids_l = [train_episode_ids_0] + [
-        np.arange(num_episodes) + num_episodes_cumsum[idx]
-        for idx, num_episodes in enumerate(num_episodes_l[1:])
-    ]
-    train_episode_ids = np.concatenate(train_episode_ids_l)
-
-    all_episode_len = get_episode_len(dataset_path_list)
-    
-    train_episode_len_l = [
-        [all_episode_len[i] for i in train_episode_ids]
-        for train_episode_ids in train_episode_ids_l
-    ]
-    
-    train_episode_len = flatten_list(train_episode_len_l)
-
-    norm_stats = {
-        "action_mean": None,
-        "action_std": None,  # avoid divide by zero
-        "state_mean": None,
-        "state_std": None,
-    }
-    
-    dataset_wo_norm_stats = EpisodicDataset(
-        dataset_path_list,
-        camera_names,
-        norm_stats,
-        train_episode_ids,
-        train_episode_len,
-        chunk_size,
-        robot_obs_size,
-        img_obs_size,
-        no_image_mode= True,
-        config_loader=config_loader
-    )
-
-    norm_stats, _ = compute_norm_stats(dataset_wo_norm_stats)
-
-    dataset = EpisodicDataset(
-        dataset_path_list,
-        camera_names,
-        norm_stats,
-        train_episode_ids,
-        train_episode_len,
-        chunk_size,
-        robot_obs_size,
-        img_obs_size,
-        config_loader=config_loader
-    )
-
-    return dataset, norm_stats
+            data_dict = {
+                'proprio': robot_state_data,
+                'action': action_data,
+                'is_pad': is_pad
+            }
+            return data_dict

@@ -1,14 +1,14 @@
 schema_version: 1
 
 params:
-  channels: (1024, 3072)
+  channels: [1024, 3072]
 
 
 model:
   graph:
     inputs: [image]
     modules:
-      vqvae_codebook:
+      radiov3:
         _type_: radiov3
         channels: ${params.channels}
 

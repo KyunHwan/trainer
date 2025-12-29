@@ -102,7 +102,8 @@ def compute_norm_stats(dataset, batch_size=128, max_samples = 100000):
 
     for i, batch in enumerate(loader):
         try:
-            robot_state_data, action_data, _ = batch
+            robot_state_data = batch['proprio']
+            action_data = batch['action']
             # Flatten temporal dimension if needed
             # print(f'action_data.shape: {action_data.shape}')
             B, T, D = action_data.shape

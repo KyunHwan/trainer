@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import einops
+
 from flow_matching.path.affine import AffineProbPath
 from flow_matching.path.scheduler.scheduler import CondOTScheduler
 
@@ -12,8 +14,8 @@ from typing import Any
 @TRAINER_REGISTRY.register("cfg_vqvae_flow_matching_trainer")
 class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
     def __init__(self,
-                 *
-                 models: nn.ModuleDict[str, nn.Modules], 
+                 *,
+                 models: nn.ModuleDict, 
                  optimizers: dict[str, torch.optim.Optimizer],
                  loss: nn.Module,):
         super().__init__()
@@ -30,20 +32,28 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
 
         """ Backbone """
         with torch.no_grad():
-            image_features, image_semantic = self.models['backbone'](data['images'])
+            head_image_features, head_image_semantic = self.models['backbone'](data['images']['head'])
+            head_image_features = einops.rearrange(head_image_features, 'b c h w -> b 1 c h w')
+
+            left_image_features, _ = self.models['backbone'](data['images']['left'])
+            left_image_features = einops.rearrange(left_image_features, 'b c h w -> b 1 c h w')
+
+            right_image_features, _ = self.models['backbone'](data['images']['right'])
+            right_image_features = einops.rearrange(right_image_features, 'b c h w -> b 1 c h w')
+
 
         """ VQVAE Posterior """
         posterior_cls_token = self.models['vqvae_posterior'](cond_proprio=data['proprio'],
-                                                             cond_visual=image_features,
-                                                             cond_semantic=image_semantic,
+                                                             cond_visual=head_image_features,
+                                                             cond_semantic=head_image_semantic,
                                                              action = data['action']
                                                              )
 
         """ VQVAE Prior """
 
         prior_cls_token = self.models['vqvae_prior'](cond_proprio=data['proprio'],
-                                                     cond_visual=image_features,
-                                                     cond_semantic=image_semantic,
+                                                     cond_visual=head_image_features,
+                                                     cond_semantic=head_image_semantic,
                                                      action = None
                                                      )
 
@@ -59,7 +69,10 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
 
         """ Info Encoder """
         conditioning_info = self.models['info_encoder'](cond_proprio=data['proprio'],
-                                                        cond_visual=image_features,
+                                                        cond_visual=torch.cat([head_image_features, 
+                                                                               left_image_features, 
+                                                                               right_image_features],
+                                                                               axis=1),
                                                         cond_semantic=simulated_quantized_vec)
 
         """ Flow Matching """
@@ -78,7 +91,7 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
         min_T = min(data['action'].shape[1], dx_t_hat.shape[1])
         dx_t_hat = dx_t_hat[:, :min_T]
         dx_t = dx_t[:, :min_T]
-        is_pad = is_pad[:, :min_T]
+        is_pad = data['is_pad'][:, :min_T]
         
         velocity_loss = self.loss(dx_t_hat, dx_t)
 

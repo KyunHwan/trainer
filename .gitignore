@@ -210,9 +210,3 @@ __marimo__/
 runs/
 *.pt
 *.pth
-
-# Ignore everything inside the experiments directories
-/experiments/*
-
-# But do not ignore the .gitignore (or any hidden file) inside it
-!/experiments/__init__.py

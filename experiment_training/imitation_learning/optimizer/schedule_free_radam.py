@@ -5,14 +5,16 @@ from offline_trainer.registry import OPTIMIZER_BUILDER_REGISTRY
 
 @OPTIMIZER_BUILDER_REGISTRY.register("schedule_free_radam")
 class RAdamScheduleFreeFactory(nn.Module):
+    def __init__(self, lr, betas, silent_sgd_phase):
+        self.lr = lr
+        self.betas = tuple(betas)
+        self.silent_sgd_phase = silent_sgd_phase
+    
     def build(self, 
-              params,
-              lr,
-              betas=(0.9, 0.999),
-              silent_sgd_phase=True
+              params
              ) -> torch.optim.Optimizer:
         
         return radam_free(params, 
-                          lr=lr, 
-                          betas=betas, 
-                          silent_sgd_phase=silent_sgd_phase)
+                          lr=self.lr, 
+                          betas=self.betas, 
+                          silent_sgd_phase=self.silent_sgd_phase)

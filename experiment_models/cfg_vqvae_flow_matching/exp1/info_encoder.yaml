@@ -2,9 +2,10 @@ schema_version: 1
 
 params:
   cond_proprio_dim: 62
-  cond_visual_dim: 1072
-  info_num_tokens: 300
+  cond_visual_dim: 1024
   use_cond_semantic: true
+  num_cameras: 3
+
 
   transformer_d_model: 384
   transformer_nhead: 16
@@ -12,7 +13,6 @@ params:
   transformer_dropout: 0.2
   transformer_activation: gelu
   transformer_batch_first: true
-  transformer_is_causal: false
   transformer_num_layers: 12
   
 
@@ -30,11 +30,11 @@ model:
         transformer_dropout: ${params.transformer_dropout}
         transformer_activation: ${params.transformer_activation}
         transformer_batch_first: ${params.transformer_batch_first}
-        transformer_is_causal: ${params.transformer_is_causal}
         transformer_num_layers: ${params.transformer_num_layers}
-        transformer_num_tokens: ${params.info_num_tokens}
         use_cond_semantic: ${params.use_cond_semantic}
         cond_semantic_dim: ${params.transformer_d_model}
+        num_cameras: ${params.num_cameras}
+    
     nodes:
       - name: conditioning_info
         call: module:info_encoder

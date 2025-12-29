@@ -1,0 +1,47 @@
+plugins:
+  - "experiment_training.imitation_learning.dataloader.episodic_data"
+  - "experiment_training.imitation_learning.loss.l2"
+  - "experiment_training.imitation_learning.optimizer.schedule_free_radam"
+  - "experiment_training.imitation_learning.trainer.cfg_vqvae_flow_matching_trainer"
+model:
+  find_unused_parameters: false
+  component_config_paths:
+    backbone: "experiment_models/cfg_vqvae_flow_matching/exp1/backbone.yaml"
+    vqvae_posterior: "experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_posterior.yaml"
+    vqvae_prior: "experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_prior.yaml"
+    vqvae_codebook: "experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_codebook.yaml"
+    info_encoder: "experiment_models/cfg_vqvae_flow_matching/exp1/info_encoder.yaml"
+    action_decoder: "experiment_models/cfg_vqvae_flow_matching/exp1/action_decoder.yaml"
+
+data:
+  datamodule:
+    type: "episodic_dataset_factory"
+    params:
+      task_name: 'picknplace'
+      task_config_path: '~/Projects/offline_trainer/experiment_training/imitation_learning/dataloader/configs'
+      dataset_dir_l: '~/Projects/picknplace_data'
+      chunk_size: 40
+      robot_obs_size: 40
+      img_obs_size: 1
+      skip_mirrored_data: 1
+  batch_size: 2
+  num_workers: 4
+  pin_memory: true
+  persistent_workers: true
+train:
+  project_name: 'cfg_vqvae_flow_matching exp1'
+  epoch: 1000
+  load_dir: null
+  save_dir: "~/Projects/offline_trainer/experiment_training/imitation_learning/cfg_vqvae_flow_matching/exp1"
+  trainer: 
+    type: 'cfg_vqvae_flow_matching_trainer'
+  optimizer:
+    type: "schedule_free_radam"
+    params:
+      lr: 1e-4
+      betas: [0.9, 0.999]
+      silent_sgd_phase: true
+  loss:
+    type: "l2_loss"
+    params:
+      reduction: "none"

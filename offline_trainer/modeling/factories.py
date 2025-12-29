@@ -34,6 +34,7 @@ class PolicyConstructorModelFactory:
         elif len(model_cfg.keys()) > 1:
             models = {}
             for k, v in model_cfg.items():
-                models[k] = build_model(model_cfg[k])
+                models[k] = build_model(v)
             return models
-        raise ValueError("model_cfg must include 'config_path' or 'config'")
+        else:
+            raise ValueError("Model building inside PolicyConstructorModelFactory not supported")

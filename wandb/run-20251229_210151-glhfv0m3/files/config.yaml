@@ -1,0 +1,131 @@
+_wandb:
+    value:
+        cli_version: 0.23.1
+        e:
+            m9e1yy6y4s95dfad7kgmo0iinz8ilrsn:
+                cpu_count: 16
+                cpu_count_logical: 32
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "2013991550976"
+                        used: "1632252043264"
+                email: peterkim@robros.co.kr
+                executable: /home/robros/anaconda3/envs/aloha/bin/python
+                git:
+                    commit: a3539be5f5e90d15279ab855d11ad291cae166bf
+                    remote: git@github.com:KyunHwan/offline_trainer.git
+                gpu: NVIDIA GeForce RTX 5090
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Blackwell
+                      cudaCores: 21760
+                      memoryTotal: "34190917632"
+                      name: NVIDIA GeForce RTX 5090
+                      uuid: GPU-cac1107a-bd8e-db7b-0fd6-fc921ca72296
+                host: robros-MS-7E59
+                memory:
+                    total: "132477259776"
+                os: Linux-6.14.0-37-generic-x86_64-with-glibc2.39
+                program: <python with no main file>
+                python: CPython 3.11.13
+                root: /home/robros/Projects/offline_trainer
+                startedAt: "2025-12-29T12:01:51.434932Z"
+                writerId: m9e1yy6y4s95dfad7kgmo0iinz8ilrsn
+        m: []
+        python_version: 3.11.13
+        t:
+            "1":
+                - 1
+                - 105
+            "2":
+                - 1
+                - 41
+                - 49
+                - 63
+                - 105
+            "3":
+                - 13
+                - 16
+            "4": 3.11.13
+            "5": 0.23.1
+            "12": 0.23.1
+            "13": linux-x86_64
+data:
+    value:
+        batch_size: 64
+        datamodule:
+            params:
+                chunk_size: 40
+                dataset_dir_l: ~/Projects/picknplace_data
+                img_obs_size: 1
+                robot_obs_size: 40
+                skip_mirrored_data: 1
+                task_config_path: ~/Projects/offline_trainer/experiment_training/imitation_learning/dataloader/configs
+                task_name: picknplace
+            type: episodic_dataset_factory
+        num_workers: 4
+        persistent_workers: true
+        pin_memory: true
+deterministic:
+    value: false
+device:
+    value: auto
+model:
+    value:
+        component_config_paths:
+            action_decoder: experiment_models/cfg_vqvae_flow_matching/exp1/action_decoder.yaml
+            bacbkone: experiment_models/cfg_vqvae_flow_matching/exp1/backbone.yaml
+            info_encoder: experiment_models/cfg_vqvae_flow_matching/exp1/info_encoder.yaml
+            vqvae_codebook: experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_codebook.yaml
+            vqvae_posterior: experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_posterior.yaml
+            vqvae_prior: experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_prior.yaml
+        find_unused_parameters: false
+plugins:
+    value:
+        - experiment_training.imitation_learning.dataloader.episodic_data
+        - experiment_training.imitation_learning.loss.l2
+        - experiment_training.imitation_learning.optimizer.schedule_free_radam
+        - experiment_training.imitation_learning.trainer.cfg_vqvae_flow_matching_trainer
+seed:
+    value: 123
+train:
+    value:
+        accumulate_grad_batches: 1
+        amp: false
+        callbacks: []
+        checkpoint:
+            resume_from: null
+            save_dir: runs
+            save_every_n_steps: null
+            save_last: true
+        ema:
+            decay: 0.999
+            enabled: false
+        epoch: 1000
+        gradient_clip_val: null
+        load_dir: null
+        log_every_n_steps: 1
+        loggers:
+            - params: {}
+              type: noop
+        loss:
+            params:
+                reduction: none
+            type: l2_loss
+        max_epochs: 1
+        max_steps: null
+        metrics: []
+        model_input: null
+        optimizer:
+            params:
+                betas: (0.9, 0.999)
+                lr: 0.0001
+                silent_sgd_phase: true
+            type: schedule_free_radam
+        project_name: cfg_vqvae_flow_matching exp1
+        save_dir: ~/Projects/offline_trainer/experiment_training/imitation_learning/cfg_vqvae_flow_matching/exp1
+        scheduler:
+            type: none
+        trainer:
+            type: cfg_vqvae_flow_matching_trainer

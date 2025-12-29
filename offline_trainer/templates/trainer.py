@@ -13,7 +13,7 @@ class Trainer(Protocol):
     def __init__(self, 
                  models: nn.ModuleDict[str, nn.Module], 
                  optimizers: dict[str, torch.optim.Optimizer],
-                 loss_fn: nn.Module): ...
+                 loss: nn.Module): ...
     
     def train_step(self, data: dict[str, Any]) -> dict[str, Any]: 
         """ Should process data and return a dict of metrics/loss """
