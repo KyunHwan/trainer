@@ -6,6 +6,8 @@ import torch
 import einops
 import h5py
 import cv2
+import random
+from torchvision import transforms
 from torch.utils.data import Dataset
 from scipy.spatial.transform import Rotation
 from .utils.utils import *
@@ -176,6 +178,21 @@ class EpisodicDataset(Dataset):
         self.obs_gripper_delay = 0 # tick
         self.action_pose_delay = 0 #tick
         self.action_gripper_delay = 0 #tick
+
+        # Define this in your __init__ method
+        self.augmentations = transforms.Compose([
+            # 1. Color Jitter: Randomly change brightness, contrast, saturation, and hue
+            # Note: 'hue' only works for RGB images. If using grayscale, remove 'hue'.
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+
+            # 2. Gaussian Blur: Blurs image to mimic focus issues or motion
+            # kernel_size must be an odd, positive integer (e.g., 3, 5, 7)
+            transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0)),
+
+            # 3. Random Rotation: Rotates the image by a random angle within the range
+            # degrees=10 means range is (-10, +10) degrees
+            transforms.RandomRotation(degrees=5) 
+        ])
         
     def __len__(self):
         return self.cumulative_len[-1]
@@ -360,13 +377,25 @@ class EpisodicDataset(Dataset):
                         for cam_name in self.camera_names:
                             #all_cam_images.append(image_dict[cam_name])
                             img = torch.from_numpy(image_dict[cam_name])
+                            single_bit = random.randint(0, 1)
+                            mono_width = img.shape[2] // 2
+                            img = img[:, :, single_bit * mono_width: (single_bit + 1) * mono_width, :]
                             
                             if img.shape[0] != 1 or img.shape[1] == 1:
                                 raise ValueError("Img shape in EpisodicDataset is not correct!")
-                            image_data_dict[cam_name] = einops.rearrange(
-                                                                img.squeeze(), 
-                                                                'h w c -> c h w'
-                            )
+                            # 1. Rearrange to (C, H, W)
+                            tensor_img = einops.rearrange(img.squeeze(), 'h w c -> c h w')
+
+                            # 2. Convert to Float and Scale to [0, 1]
+                            tensor_img = tensor_img.float() / 255.0
+
+                            # 3. Apply Augmentations (Only during training!)
+                            # Assuming you have a flag self.is_train or similar
+                            if self.augmentations is not None:
+                                tensor_img = self.augmentations(tensor_img)
+
+                            # 4. Store
+                            image_data_dict[cam_name] = tensor_img
 
                         #all_cam_images = np.stack(all_cam_images, axis=0)
 

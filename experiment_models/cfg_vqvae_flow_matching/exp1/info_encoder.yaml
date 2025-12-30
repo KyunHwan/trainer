@@ -13,7 +13,7 @@ params:
   transformer_dropout: 0.2
   transformer_activation: gelu
   transformer_batch_first: true
-  transformer_num_layers: 12
+  transformer_num_layers: 6
   
 
 model:

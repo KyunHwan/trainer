@@ -24,7 +24,7 @@ data:
       robot_obs_size: 40
       img_obs_size: 1
       skip_mirrored_data: 1
-  batch_size: 2
+  batch_size: 32
   num_workers: 4
   pin_memory: true
   persistent_workers: true
