@@ -20,7 +20,7 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
                  loss: nn.Module,):
         super().__init__()
         
-        self.dist = torch.distributions.Beta(1.0, 1.5) # as in pi-paper by physical intelligence
+        self.dist = torch.distributions.Beta(1.0, 1.5) # as in pi0-paper by physical intelligence
         self.probPath = AffineProbPath(CondOTScheduler())
         
         self.models=models
@@ -41,7 +41,6 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
             right_image_features, _ = self.models['backbone'](data['images']['right'])
             right_image_features = einops.rearrange(right_image_features, 'b c h w -> b 1 c h w')
 
-
         """ VQVAE Posterior """
         posterior_cls_token = self.models['vqvae_posterior'](cond_proprio=data['proprio'],
                                                              cond_visual=head_image_features,
@@ -50,7 +49,6 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
                                                              )
 
         """ VQVAE Prior """
-
         prior_cls_token = self.models['vqvae_prior'](cond_proprio=data['proprio'],
                                                      cond_visual=head_image_features,
                                                      cond_semantic=head_image_semantic,
@@ -100,6 +98,7 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
 
         loss["velocity"] = masked_velocity_loss.mean()
         loss["prior_posterior"] = self.loss(prior_cls_token, posterior_cls_token.detach()).mean()
+        loss["codebook_min_dist"] = self.models['vqvae_codebook'].get_min_pairwise_dist()
 
         return loss
 
@@ -128,7 +127,10 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
     def _backward(self, loss: dict[str, torch.Tensor]):
         # can do backbward independently on each loss since they're from disjoint graphs
         for key in loss.keys():
-            loss[key].backward()
+            if isinstance(loss[key], torch.Tensor): 
+                loss[key].backward()
+            else:
+                continue
 
     def _step(self):
         for key in self.optimizers.keys():
@@ -137,5 +139,8 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
     def _detached_loss(self, loss: dict[str, torch.Tensor]):
         detached_loss = {}
         for key in loss.keys():
-            detached_loss[key] = loss[key].detach().cpu().item()
+            if isinstance(loss[key], torch.Tensor): 
+                detached_loss[key] = loss[key].detach().cpu().item()
+            else: 
+                detached_loss[key] = loss[key]
         return detached_loss
