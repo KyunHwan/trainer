@@ -119,7 +119,7 @@ def _build_models(local_rank, enable_dist_train, config, device) -> nn.ModuleDic
 
     for k, policy in models.items():
         model_loaded = False
-        print(f"Total parameters of {k} model: {sum(p.numel() for p in policy.parameters())}")
+        if local_rank == 0: print(f"Total parameters of {k} model: {sum(p.numel() for p in policy.parameters())}")
 
         # Load model checkpoints / initialization
         # Need to check that saved models weren't wrapped using DDP (ie. that they aren't wrapped using modules)
@@ -164,7 +164,7 @@ def _build_optimizers(config, models: nn.ModuleDict[str, nn.Module], device) -> 
     
     return optimizers
 
-def _build_dataloader(rank, world_size, config, enable_dist_train):
+def _build_dataloader(world_rank, local_rank, world_size, config, enable_dist_train):
     """
     Required Config Params:
         data.datamodule.type
@@ -178,7 +178,7 @@ def _build_dataloader(rank, world_size, config, enable_dist_train):
     
     datamodule_cls = DATASET_BUILDER_REGISTRY.get(config.data.datamodule.type)
     dataset_factory = instantiate(datamodule_cls, params=config.data.datamodule.params, config=config)
-    returned_product = dataset_factory.build(config.data.datamodule.params)
+    returned_product = dataset_factory.build(local_rank=local_rank, dist_enabled=enable_dist_train, save_dir=config.train.save_dir, params=config.data.datamodule.params)
 
     if isinstance(returned_product, dict):
         for key in returned_product.keys():
@@ -186,7 +186,7 @@ def _build_dataloader(rank, world_size, config, enable_dist_train):
                 dataset = returned_product[key]
             elif key == 'norm_stats':
                 stats = returned_product[key]
-                if rank == 0:
+                if local_rank == 0:
                     try:
                         stats_path = os.path.join(config.train.save_dir, f"dataset_stats.pkl")
                         with open(stats_path, "wb") as f:
@@ -198,17 +198,17 @@ def _build_dataloader(rank, world_size, config, enable_dist_train):
 
     else: 
         dataset = returned_product
-
-
+    
     # When using DistributedSampler, do NOT set shuffle=True on DataLoader.
     # Shuffling is handled by the sampler (see PyTorch DDP tutorial pattern)
-    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, drop_last=True) if enable_dist_train else RandomSampler(dataset)
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=world_rank, drop_last=True) if enable_dist_train else RandomSampler(dataset)
     dataloader = DataLoader(dataset, 
                             sampler=sampler, 
                             batch_size=config.data.batch_size,
                             num_workers=config.data.num_workers,
                             pin_memory=config.data.pin_memory,
                             persistent_workers=config.data.persistent_workers,
+                            prefetch_factor=config.data.prefetch_factor,
                             worker_init_fn=seed_worker,
                             drop_last=False,
                             shuffle=False)
@@ -340,14 +340,15 @@ def train(config_path: str) -> None:
     base_seed = getattr(config.train, "seed", 0)
     set_global_seed(seed=base_seed)
 
-    print(f"Global batch size = {config.data.batch_size * world_size}")
+    if rank == 0: print(f"Global batch size = {config.data.batch_size * world_size}")
 
     trainer = _build_trainer(local_rank, enable_dist_train, config, device)
 
     # After models build with synchronized model initialization, offset seed for runtime randomness (Dropout, etc.)
     # This ensures distinct stochastic behavior per GPU
     set_global_seed(seed=base_seed + rank)
-    dataloader, sampler = _build_dataloader(rank, world_size, config, enable_dist_train)
+
+    dataloader, sampler = _build_dataloader(world_rank=rank, local_rank=local_rank, world_size=world_size, config=config, enable_dist_train=enable_dist_train)
 
     try:
         iterations = 0
@@ -373,10 +374,12 @@ def train(config_path: str) -> None:
                 
             _dist_barrier(enable_dist_train)
 
-        print("Training finished !!")
+        if rank == 0: 
+            print("Training finished !!")
 
     finally:
         if rank == 0:
+            print("program terminating...")
             wandb.finish()
         _dist_cleanup(enable_dist_train)
 
@@ -391,10 +394,10 @@ def train(config_path: str) -> None:
 
 
 if __name__ == "__main__":
-    try:
-        torch.multiprocessing.set_start_method('spawn')
-    except RuntimeError:
-        pass
+    # try:
+    #     torch.multiprocessing.set_start_method('spawn')
+    # except RuntimeError:
+    #     pass
     parser = argparse.ArgumentParser(description="Parse for train config .yaml file")
     parser.add_argument("--train_config", help="absolute path to the train config .yaml file.", required=True)
     args = parser.parse_args()

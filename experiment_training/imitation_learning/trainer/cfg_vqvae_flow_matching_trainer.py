@@ -61,9 +61,9 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
         """ NSVQ """
         # https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9696322
         noise_vec = torch.randn_like(posterior_cls_token, device=posterior_cls_token.device)
-        normalized_noise_vec = F.normalize(noise_vec, p=2, dim=0)
-        simulated_quantized_vec = posterior_cls_token + \
-                                  normalized_noise_vec * torch.norm(posterior_cls_token - related_codebook_quantized_vec, p=2, dim=0)
+        normalized_noise_vec = F.normalize(noise_vec, p=2, dim=-1)
+        distance_magnitude = torch.norm(posterior_cls_token - related_codebook_quantized_vec, p=2, dim=-1, keepdim=True)
+        simulated_quantized_vec = posterior_cls_token + normalized_noise_vec * distance_magnitude
 
         """ Info Encoder """
         conditioning_info = self.models['info_encoder'](cond_proprio=data['proprio'],
@@ -98,7 +98,6 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
 
         loss["velocity"] = masked_velocity_loss.mean()
         loss["prior_posterior"] = self.loss(prior_cls_token, posterior_cls_token.detach()).mean()
-        loss["codebook_min_dist"] = self.models['vqvae_codebook'].get_min_pairwise_dist()
 
         return loss
 
@@ -122,15 +121,12 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
 
     def _zero_grad(self):
         for key in self.optimizers.keys():
-            self.optimizers[key].zero_grad()
+            self.optimizers[key].zero_grad(set_to_none=True)
 
     def _backward(self, loss: dict[str, torch.Tensor]):
         # can do backbward independently on each loss since they're from disjoint graphs
         for key in loss.keys():
-            if isinstance(loss[key], torch.Tensor): 
-                loss[key].backward()
-            else:
-                continue
+            loss[key].backward()
 
     def _step(self):
         for key in self.optimizers.keys():
@@ -139,8 +135,5 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
     def _detached_loss(self, loss: dict[str, torch.Tensor]):
         detached_loss = {}
         for key in loss.keys():
-            if isinstance(loss[key], torch.Tensor): 
-                detached_loss[key] = loss[key].detach().cpu().item()
-            else: 
-                detached_loss[key] = loss[key]
+            detached_loss[key] = loss[key].detach().cpu().item()
         return detached_loss

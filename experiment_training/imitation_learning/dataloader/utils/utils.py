@@ -50,19 +50,17 @@ def validate_hdf5_file(file_path, config_loader=None):
 
 
 
-def get_episode_len(dataset_path_list):
+def get_episode_len(local_rank, dataset_path_list):
     all_episode_len = []
     valid_dataset_paths = []
-    
-    print("Validating HDF5 files...")
+    if local_rank == 0: 
+        print("Validating HDF5 files...")
     for i, dataset_path in enumerate(dataset_path_list):
         try:
             with h5py.File(dataset_path, "r") as root:
                 episode_len = root["/observation/joint_pos/left"].shape[0]
                 all_episode_len.append(episode_len)
                 valid_dataset_paths.append(dataset_path)
-                if (i + 1) % 10 == 0:
-                    print(f"Validated {i + 1}/{len(dataset_path_list)} files...")
         except Exception as e:
             print(f"Error loading {dataset_path} in get_episode_len: {e}")
             print(f"Skipping corrupted file: {dataset_path}")
@@ -71,7 +69,8 @@ def get_episode_len(dataset_path_list):
     if len(valid_dataset_paths) == 0:
         raise RuntimeError("No valid HDF5 files found in dataset!")
     
-    print(f"Found {len(valid_dataset_paths)} valid files out of {len(dataset_path_list)} total files")
+    if local_rank == 0: 
+        print(f"Found {len(valid_dataset_paths)} valid files out of {len(dataset_path_list)} total files")
     
     dataset_path_list.clear()
     dataset_path_list.extend(valid_dataset_paths)
@@ -93,7 +92,7 @@ def compute_norm_stats(dataset, batch_size=128, max_samples = 100000):
     """
 
     # Reduce num_workers to avoid "too many open files" error with large datasets
-    num_workers = min(4, os.cpu_count() or 1)
+    num_workers = max(os.cpu_count() - 4, 1)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     all_actions = []
@@ -144,7 +143,7 @@ def find_all_hdf5(dataset_dir, skip_mirrored_data):
             if skip_mirrored_data and "mirror" in filename:
                 continue
             hdf5_files.append(os.path.join(root, filename))
-    print(f"Found {len(hdf5_files)} hdf5 files")
+    #print(f"Found {len(hdf5_files)} hdf5 files")
     return hdf5_files
 
 

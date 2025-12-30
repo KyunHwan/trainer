@@ -18,21 +18,22 @@ data:
     type: "episodic_dataset_factory"
     params:
       task_name: 'picknplace'
-      task_config_path: '~/Projects/offline_trainer/experiment_training/imitation_learning/dataloader/configs'
-      dataset_dir_l: '~/Projects/picknplace_data'
+      task_config_path: '~/offline_trainer/experiment_training/imitation_learning/dataloader/configs'
+      dataset_dir_l: '~/igris-b-pnp/resized_raw_dataset'
       chunk_size: 40
       robot_obs_size: 40
       img_obs_size: 1
       skip_mirrored_data: 1
-  batch_size: 32
-  num_workers: 4
-  pin_memory: true
+  batch_size: 128
+  num_workers: 12
+  pin_memory: false
   persistent_workers: true
+  prefetch_factor: 1
 train:
   project_name: 'cfg_vqvae_flow_matching exp1'
   epoch: 1000
   load_dir: null
-  save_dir: "~/Projects/offline_trainer/experiment_training/imitation_learning/cfg_vqvae_flow_matching/exp1"
+  save_dir: "~/offline_trainer/experiment_training/imitation_learning/cfg_vqvae_flow_matching/exp1"
   trainer: 
     type: 'cfg_vqvae_flow_matching_trainer'
   optimizer:

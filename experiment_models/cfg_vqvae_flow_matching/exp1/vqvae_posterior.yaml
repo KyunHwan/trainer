@@ -8,6 +8,8 @@ params:
   use_cond_semantic_projection: true
   cond_semantic_dim: 3072
   num_cameras: 1
+  use_cls_token: true
+  num_cls_token: 4
 
   transformer_d_model: 384
   transformer_nhead: 16
@@ -38,6 +40,8 @@ model:
         use_cond_semantic_projection: ${params.use_cond_semantic_projection}
         cond_semantic_dim: ${params.cond_semantic_dim}
         num_cameras: ${params.num_cameras}
+        use_cls_token: ${params.use_cls_token}
+        num_cls_token: ${params.num_cls_token}
     nodes:
       - name: posterior_semantic
         call: module:vqvae_posterior

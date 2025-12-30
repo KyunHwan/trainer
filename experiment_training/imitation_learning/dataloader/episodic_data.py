@@ -2,20 +2,27 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import cv2
+
 import torch
 import einops
+
+import os
+# This is essential to allow multiple workers to access hdf5 files
+os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 import h5py
-import cv2
+
 import random
 from torchvision import transforms
 from torch.utils.data import Dataset
+import torch.distributed as dist
 from scipy.spatial.transform import Rotation
 from .utils.utils import *
 from typing import Any
 from .utils.config_loader import ConfigLoader
 
 from pathlib import Path
-
+import pickle
 from offline_trainer.registry import DATASET_BUILDER_REGISTRY
 
 from typing import Any
@@ -26,13 +33,16 @@ e = IPython.embed
 
 @DATASET_BUILDER_REGISTRY.register('episodic_dataset_factory')
 class EpisodicDatasetFactory:
-    def build(self, params) -> dict[str, Any]:
+    def build(self, local_rank, dist_enabled, save_dir, params) -> dict[str, Any]:
         raw_path = os.path.join(params['task_config_path'], f"{params['task_name']}.json")
         file_path = Path(raw_path).expanduser()
         config_loader = ConfigLoader(file_path)
         camera_names = config_loader.get_camera_names()
         
-        dataset, norm_stats = load_data(
+        dataset = load_data(
+            local_rank = local_rank,
+            dist_enabled = dist_enabled,
+            save_dir=save_dir,
             dataset_dir_l=Path(params['dataset_dir_l']).expanduser(),
             camera_names=camera_names,
             chunk_size=params['chunk_size'],
@@ -41,12 +51,14 @@ class EpisodicDatasetFactory:
             skip_mirrored_data=params['skip_mirrored_data'],
             config_loader=config_loader)
         
-        return {"dataset": dataset, 
-                "norm_stats": norm_stats}
+        return {"dataset": dataset}
 
 
 
 def load_data(
+    local_rank,
+    dist_enabled,
+    save_dir,
     dataset_dir_l,
     camera_names,
     chunk_size=40,
@@ -55,7 +67,7 @@ def load_data(
     skip_mirrored_data=False,
     config_loader=None,
 ):
-    print(f'Finding all hdf5 files in {dataset_dir_l}')
+    if local_rank == 0: print(f'Finding all hdf5 files in {dataset_dir_l}')
     if isinstance(dataset_dir_l, (str, Path)):
         dataset_dir_l = [dataset_dir_l]
     if type(dataset_dir_l) == str:
@@ -85,7 +97,7 @@ def load_data(
     ]
     train_episode_ids = np.concatenate(train_episode_ids_l)
 
-    all_episode_len = get_episode_len(dataset_path_list)
+    all_episode_len = get_episode_len(local_rank, dataset_path_list)
     
     train_episode_len_l = [
         [all_episode_len[i] for i in train_episode_ids]
@@ -93,7 +105,7 @@ def load_data(
     ]
     
     train_episode_len = flatten_list(train_episode_len_l)
-
+    
     norm_stats = {
         "action_mean": None,
         "action_std": None,  # avoid divide by zero
@@ -113,9 +125,42 @@ def load_data(
         no_image_mode= True,
         config_loader=config_loader
     )
+    # This takes bulk of the dataset loading time...
+    norm_stats = None
 
-    norm_stats, _ = compute_norm_stats(dataset_wo_norm_stats)
+    try:
+        stats_path = Path(os.path.join(save_dir, f"dataset_stats.pkl")).expanduser()
+        if os.path.isfile(stats_path):
+            with open(stats_path, 'rb') as file:
+                norm_stats = pickle.load(file)
+    except:
+        pass
 
+    if norm_stats is None:
+        if local_rank == 0:
+            print("calculating norm stats...")
+            norm_stats, _ = compute_norm_stats(dataset_wo_norm_stats)
+            try:
+                stats_path = os.path.join(save_dir, f"dataset_stats.pkl")
+                with open(stats_path, "wb") as f:
+                    pickle.dump(norm_stats, f)
+            except:
+                stats_path = Path(os.path.join(save_dir, f"dataset_stats.pkl")).expanduser()
+                with open(stats_path, "wb") as f:
+                    pickle.dump(norm_stats, f)
+        if dist_enabled:
+            dist.barrier()
+
+        if local_rank != 0:
+            try:
+                stats_path = os.path.join(save_dir, f"dataset_stats.pkl")
+                with open(stats_path, 'rb') as file:
+                    norm_stats = pickle.load(file)
+            except:
+                stats_path = Path(os.path.join(save_dir, f"dataset_stats.pkl")).expanduser()
+                with open(stats_path, 'rb') as file:
+                    norm_stats = pickle.load(file)
+        
     dataset = EpisodicDataset(
         dataset_path_list,
         camera_names,
@@ -128,7 +173,7 @@ def load_data(
         config_loader=config_loader
     )
 
-    return dataset, norm_stats
+    return dataset
 
 class EpisodicDataset(Dataset):
     def __init__(
@@ -157,13 +202,13 @@ class EpisodicDataset(Dataset):
         self.cumulative_len = np.cumsum(self.episode_len)
         if len(self.cumulative_len) == 0:
             raise ValueError("Dataset is empty. Please check your data directory.")
-        print("dataset size: ", self.cumulative_len[-1])
+        
         self.max_episode_len = max(episode_len)
 
         self.augment_images = True
         self.separate_left_right = False
-        self.img_downsample = True
-        self.img_downsample_size = (640, 240)
+        self.img_downsample = False
+        self.img_downsample_size = (640, 240) # (w x h)
         
         self.img_debug = False
 
@@ -176,7 +221,7 @@ class EpisodicDataset(Dataset):
         self.compressed = True
         self.obs_tracker_delay = 0 # tick
         self.obs_gripper_delay = 0 # tick
-        self.action_pose_delay = 0 #tick
+        self.action_pose_delay = 0 # tick
         self.action_gripper_delay = 0 #tick
 
         # Define this in your __init__ method
@@ -367,7 +412,7 @@ class EpisodicDataset(Dataset):
                                         image_dict[cam_name][t], 1
                                     )
 
-                                    if decompressed_image.shape[0:2] != self.img_downsample_size:
+                                    if self.img_downsample and decompressed_image.shape[0:2] != self.img_downsample_size:
                                         decompressed_image = cv2.resize(decompressed_image, self.img_downsample_size, interpolation=cv2.INTER_AREA)
                                     decompressed_image_array.append(decompressed_image)
                                 image_dict[cam_name] = np.array(decompressed_image_array)
