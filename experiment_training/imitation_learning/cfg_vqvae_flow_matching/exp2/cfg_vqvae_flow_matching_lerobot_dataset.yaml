@@ -12,6 +12,25 @@ model:
     vqvae_codebook: "experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_codebook.yaml"
     info_encoder: "experiment_models/cfg_vqvae_flow_matching/exp1/info_encoder.yaml"
     action_decoder: "experiment_models/cfg_vqvae_flow_matching/exp1/action_decoder.yaml"
+  component_build_args:
+    backbone:
+      init: false
+      freeze: true
+    vqvae_codebook:
+      init: false
+      freeze: false
+    vqvae_posterior:
+      init: true
+      freeze: false
+    vqvae_prior:
+      init: true
+      freeze: false
+    info_encoder:
+      init: true
+      freeze: false
+    action_decoder:
+      init: true
+      freeze: false
   component_optims:
     backbone:
       type: "schedule_free_radam"

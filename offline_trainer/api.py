@@ -156,6 +156,7 @@ def _build_models(world_size, global_rank, local_rank, enable_dist_train, config
     
     for k, policy in models.items():
         model_loaded = False
+        frozen = False
         if local_rank == 0: print(f"Total parameters of {k} model: {sum(p.numel() for p in policy.parameters())}")
 
         # Load model checkpoints / initialization
@@ -164,7 +165,14 @@ def _build_models(world_size, global_rank, local_rank, enable_dist_train, config
             model_loaded = True
             policy.load_state_dict(torch.load(os.path.join(config.train.load_dir, f"{k}.pt"), map_location=device))
         else:
-            if k != 'backbone' and k != 'vqvae_codebook': policy.apply(init_weights)
+            if config.model.component_build_args[k]['init']: 
+                policy.apply(init_weights)
+        
+        if config.model.component_build_args[k]['freeze']:
+            frozen = True
+            for param in policy.parameters():
+                param.requires_grad_(False)
+            policy.eval()
 
         # If BatchNorm layers in a real model, convert to SyncBatchNorm so BN stats sync across replicas
         # This should be before moving the model onto a device
@@ -179,7 +187,7 @@ def _build_models(world_size, global_rank, local_rank, enable_dist_train, config
         # For example, when mixture of experts is used.
         find_unused_parameters = getattr(config.model, "find_unused_parameters", False)
 
-        models[k] = DDP(policy, device_ids=[local_rank], output_device=local_rank,broadcast_buffers=False, find_unused_parameters=find_unused_parameters) if enable_dist_train else policy
+        models[k] = DDP(policy, find_unused_parameters=find_unused_parameters) if enable_dist_train and not frozen else policy
 
     return nn.ModuleDict(models)
 
@@ -194,6 +202,10 @@ def _build_optimizers(config, models: nn.ModuleDict[str, nn.Module], device) -> 
     # One optimizer per model
     optimizers = {}
     for k, model in models.items():
+        # Skip models that are frozen
+        params = [p for p in model.parameters() if p.requires_grad]
+        if len(params) == 0:
+            continue 
         optimizer_cls = OPTIMIZER_BUILDER_REGISTRY.get(config.model.component_optims[k]['type'])
         optimizer_factory = instantiate(optimizer_cls, 
                                         _params_dict(OptimizerParams.model_validate(config.model.component_optims[k]['params']).model_dump()))
