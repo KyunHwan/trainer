@@ -18,7 +18,8 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
                  *,
                  models: nn.ModuleDict, 
                  optimizers: dict[str, torch.optim.Optimizer],
-                 loss: nn.Module,):
+                 loss: nn.Module,
+                 device):
         super().__init__()
         
         self.dist = torch.distributions.Beta(1.0, 1.5) # as in pi0-paper by physical intelligence
@@ -27,10 +28,10 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
         self.models=models
         self.optimizers=optimizers
         self.loss=loss
-        self.posterior_ema = copy.deepcopy(self.unwrap(self.models["vqvae_posterior"])).eval()
+        self.posterior_ema = copy.deepcopy(self.unwrap(self.models["vqvae_posterior"])).to(device).eval()
         for p in self.posterior_ema.parameters():
             p.requires_grad_(False)
-        self.posterior_ema_factor = 0.995
+        self.posterior_ema_factor = 0.999
 
     def forward(self, data: dict[str, Any], epoch, total_epochs) -> dict[str, torch.Tensor]:
         loss = {}
@@ -109,8 +110,9 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
                                                   action = data['action']
                                                  )  # e.g., returns posterior_cls_token_ema
             loss["True_prior_posterior"] = torch.sum(torch.pow(prior_cls_token.detach().clone() - posterior_cls_token.detach().clone(), 2), dim=-1, keepdim=False).mean().item()
-
-        loss["velocity"] = torch.sum(torch.sum(torch.pow(dx_t - dx_t_hat, 2), dim=-1, keepdim=False), dim=-1, keepdim=False).mean()
+        err = (dx_t - dx_t_hat).pow(2)
+        velocity_loss = err.view(err.shape[0], -1).sum(dim=1).mean()
+        loss["velocity"] = velocity_loss
         loss["EMA_prior_posterior"] = torch.sum(torch.pow(prior_cls_token - posterior_target, 2), dim=-1, keepdim=False).mean()
             
         return loss
@@ -143,7 +145,8 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
 
     @torch.no_grad()
     def update_posterior_ema(self):
-        msd = self.models['vqvae_posterior'].module.state_dict()
+        src = self.unwrap(self.models["vqvae_posterior"])
+        msd = src.state_dict()
         for k, v_ema in self.posterior_ema.state_dict().items():
             v = msd[k]
             if v.dtype.is_floating_point:

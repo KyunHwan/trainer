@@ -290,7 +290,8 @@ def _build_trainer(world_size, global_rank, local_rank, enable_dist_train, confi
         _params_dict(config.train.trainer.params),
         models=models,
         optimizers=optimizers,
-        loss=loss_fn 
+        loss=loss_fn,
+        device=device
     )
     if not isinstance(trainer, Trainer):
         raise TypeError("Constructed object does not match Trainer interface")
