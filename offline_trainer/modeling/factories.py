@@ -31,7 +31,7 @@ class PolicyConstructorModelFactory:
             return build_model(model_cfg["config_path"])
         elif "config" in model_cfg:
             return build_model(model_cfg["config"])
-        elif len(model_cfg.keys()) > 1:
+        elif len(model_cfg.keys()) > 0: # when name of each model is given as a field
             models = {}
             for k, v in model_cfg.items():
                 models[k] = build_model(v)

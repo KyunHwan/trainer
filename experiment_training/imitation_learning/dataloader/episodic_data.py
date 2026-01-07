@@ -8,6 +8,7 @@ import torch
 import einops
 
 import os
+
 # This is essential to allow multiple workers to access hdf5 files
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 import h5py
@@ -33,13 +34,16 @@ e = IPython.embed
 
 @DATASET_BUILDER_REGISTRY.register('episodic_dataset_factory')
 class EpisodicDatasetFactory:
-    def build(self, local_rank, dist_enabled, save_dir, params) -> dict[str, Any]:
+    def build(self, opt_params: dict[str, Any] | None, params) -> dict[str, Any]:
+        local_rank = opt_params['local_rank']
+        dist_enabled = opt_params['dist_enabled']
+        save_dir = opt_params['save_dir']
         raw_path = os.path.join(params['task_config_path'], f"{params['task_name']}.json")
         file_path = Path(raw_path).expanduser()
         config_loader = ConfigLoader(file_path)
         camera_names = config_loader.get_camera_names()
         
-        dataset = load_data(
+        dataset, norm_stats = load_data(
             local_rank = local_rank,
             dist_enabled = dist_enabled,
             save_dir=save_dir,
@@ -50,9 +54,26 @@ class EpisodicDatasetFactory:
             img_obs_size=params['img_obs_size'],
             skip_mirrored_data=params['skip_mirrored_data'],
             config_loader=config_loader)
-        
-        return {"dataset": dataset}
+        if norm_stats is None:
+            return dataset
+        else:
+            return {"dataset": dataset,
+                    "norm_stats": norm_stats}
 
+def load_dummy_data(
+    local_rank,
+    dist_enabled,
+    save_dir,
+    dataset_dir_l,
+    camera_names,
+    chunk_size=40,
+    robot_obs_size=40,
+    img_obs_size=1,
+    skip_mirrored_data=False,
+    config_loader=None,
+):
+    dataset = DummyEpisodicDataset()
+    return dataset, None
 
 
 def load_data(
@@ -173,7 +194,28 @@ def load_data(
         config_loader=config_loader
     )
 
-    return dataset
+    return dataset, norm_stats
+
+class DummyEpisodicDataset(Dataset):
+    def __init__(self,):
+        self.len = 10000
+
+    def __len__(self,):
+        return 10000
+    
+    def __getitem__(self, index):
+        images = {
+                'head': torch.rand((3, 321, 432)),
+                'left': torch.rand((3, 321, 432)),
+                'right': torch.rand((3, 321, 432)),
+            }
+        data_dict = {
+            'images': images,
+            'proprio': torch.rand((40, 62)),
+            'action': torch.rand((40, 24)),
+            'is_pad': torch.bernoulli(torch.full((40,), 0.5)).bool()
+        }
+        return data_dict
 
 class EpisodicDataset(Dataset):
     def __init__(

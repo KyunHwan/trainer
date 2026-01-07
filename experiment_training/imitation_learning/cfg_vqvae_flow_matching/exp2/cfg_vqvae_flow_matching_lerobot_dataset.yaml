@@ -4,7 +4,7 @@ plugins:
   - "experiment_training.imitation_learning.optimizer.schedule_free_radam"
   - "experiment_training.imitation_learning.trainer.cfg_vqvae_flow_matching_trainer"
 model:
-  find_unused_parameters: false
+  find_unused_parameters: true
   component_config_paths:
     backbone: "experiment_models/cfg_vqvae_flow_matching/exp1/backbone.yaml"
     vqvae_posterior: "experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_posterior.yaml"
@@ -56,19 +56,14 @@ data:
     type: "lerobot_dataset_factory"
     params:
       task_name: 'picknplace'
-      task_config_path: '~/offline_trainer/experiment_training/imitation_learning/dataloader/configs'
-      dataset_dir_l: '~/igris-b-pnp/resized_raw_dataset'
       local_files_only: true
       root: '~/igris-b-pnp/lerobot_dataset/data'
       repo_id: 'joon001001/igris-b-pnp-lerobot'
-      chunk_size: 40
-      robot_obs_size: 40
-      img_obs_size: 1
-      skip_mirrored_data: 1
       action_horizon: 40
-      obs_history: 40
+      obs_proprio_history: 40
+      obs_images_history: 1
       HZ: 20
-  batch_size: 128
+  batch_size: 224
   num_workers: 12
   pin_memory: true
   persistent_workers: true
@@ -77,10 +72,11 @@ train:
   project_name: 'cfg_vqvae_flow_matching exp1'
   epoch: 1000
   load_dir: null
+  save_every: 10
   save_dir: "~/offline_trainer/experiment_training/imitation_learning/cfg_vqvae_flow_matching/exp1"
   trainer: 
     type: 'cfg_vqvae_flow_matching_trainer'
   loss:
     type: "l2_loss"
     params:
-      reduction: "none"
+      reduction: "sum"

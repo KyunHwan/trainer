@@ -4,7 +4,7 @@ from offline_trainer.registry import LOSS_BUILDER_REGISTRY
 
 @LOSS_BUILDER_REGISTRY.register("l2_loss")
 class L2LossFactory:
-    def build(self, reduction: str = "none") -> nn.Module:
+    def build(self, reduction: str = "sum") -> nn.Module:
         return L2Loss(reduction=reduction)
 
 

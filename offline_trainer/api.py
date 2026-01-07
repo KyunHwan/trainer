@@ -27,7 +27,8 @@ from offline_trainer.utils.import_utils import instantiate
 from offline_trainer.utils.seed import *
 import argparse
 
-from offline_trainer.utils.device import move_to_device
+from offline_trainer.utils.device import move_to_device, cast_dtype
+from offline_trainer.utils.tree import tree_map
 
 import torch
 import torch.nn as nn
@@ -38,10 +39,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader, RandomSampler
 
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
 
 from tqdm import tqdm
-#import wandb
+import wandb
 import pickle
 
 def _params_dict(params) -> dict:
@@ -69,17 +70,51 @@ def init_weights(m):
         if m.bias is not None:
             init.constant_(m.bias, 0)
 
+def map_list_to_torch(lst: list):
+    import torch
+    return torch.tensor(lst)
+
+
 
 """ Distributed Training Helpers """
+
+def sync(tag: str, local_rank):
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    if local_rank == 0:
+        print(f"[sync ok] {tag}", flush=True)
+
+def _model_fingerprint(m: nn.Module):
+    import hashlib
+    import json
+    items = []
+    for n, p in m.named_parameters():
+        items.append((n, tuple(p.shape), str(p.dtype), p.requires_grad))
+    # include buffers too (even if broadcast_buffers=False, mismatched buffers can indicate mismatched build)
+    for n, b in m.named_buffers():
+        items.append((f"BUF:{n}", tuple(b.shape), str(b.dtype), False))
+    s = json.dumps(items, sort_keys=True).encode("utf-8")
+    return hashlib.sha1(s).hexdigest(), items
+
+def find_unregistered_tensors(m: nn.Module):
+    param_ids = {id(p) for p in m.parameters()}
+    buffer_ids = {id(b) for b in m.buffers()}
+    weird = []
+    for mod_name, mod in m.named_modules():
+        for k, v in vars(mod).items():
+            if torch.is_tensor(v) and id(v) not in param_ids and id(v) not in buffer_ids:
+                weird.append((mod_name, k, str(v.device), tuple(v.shape), str(v.dtype)))
+    return weird
 
 def _dist_setup(enable_dist_train, device) -> None:
     if enable_dist_train:
         dist.init_process_group(backend="nccl",
-                                device_id=device)
+                                init_method="env://",
+                                )
 
-def _dist_barrier(dist_enabled) -> None:
+def _dist_barrier(dist_enabled, local_rank) -> None:
     if dist_enabled:
-        dist.barrier()
+        dist.barrier(device_ids=[local_rank])
 
 def _dist_cleanup(enable_dist_train) -> None:
     if enable_dist_train:
@@ -100,7 +135,7 @@ def _build_loss(config, device) -> nn.Module:
     loss_fn = loss_fn.build()
     return loss_fn if not isinstance(loss_fn, nn.Module) else loss_fn.to(device)
 
-def _build_models(local_rank, enable_dist_train, config, device) -> nn.ModuleDict[str, nn.Module]:
+def _build_models(world_size, global_rank, local_rank, enable_dist_train, config, device) -> nn.ModuleDict[str, nn.Module]:
     """
     Required Config Params:
         model.config_path
@@ -117,11 +152,8 @@ def _build_models(local_rank, enable_dist_train, config, device) -> nn.ModuleDic
 
     model_factory = PolicyConstructorModelFactory()
     model = model_factory.build(model_config_paths)
-
-    # Allows for multiple models to be trained (ex. in offline rl setting)
     models = {"main": model} if not isinstance(model, dict) else model
-
-
+    
     for k, policy in models.items():
         model_loaded = False
         if local_rank == 0: print(f"Total parameters of {k} model: {sum(p.numel() for p in policy.parameters())}")
@@ -132,13 +164,13 @@ def _build_models(local_rank, enable_dist_train, config, device) -> nn.ModuleDic
             model_loaded = True
             policy.load_state_dict(torch.load(os.path.join(config.train.load_dir, f"{k}.pt"), map_location=device))
         else:
-            policy.apply(init_weights)
+            if k != 'backbone' and k != 'vqvae_codebook': policy.apply(init_weights)
 
         # If BatchNorm layers in a real model, convert to SyncBatchNorm so BN stats sync across replicas
         # This should be before moving the model onto a device
         if torch.cuda.is_available() and enable_dist_train and any(isinstance(m, nn.modules.batchnorm._BatchNorm) for m in policy.modules()):
             policy = nn.SyncBatchNorm.convert_sync_batchnorm(policy)
-        
+
         # If the model wasn't loaded onto device, load it onto device
         if not model_loaded:
             policy = policy.to(device)
@@ -146,7 +178,8 @@ def _build_models(local_rank, enable_dist_train, config, device) -> nn.ModuleDic
         # 'find_unused_parameters' is used when there are conditional cases that leave some parts of the model unexplored. 
         # For example, when mixture of experts is used.
         find_unused_parameters = getattr(config.model, "find_unused_parameters", False)
-        models[k] = DDP(policy, device_ids=[local_rank], find_unused_parameters=find_unused_parameters) if enable_dist_train else policy
+
+        models[k] = DDP(policy, device_ids=[local_rank], output_device=local_rank,broadcast_buffers=False, find_unused_parameters=find_unused_parameters) if enable_dist_train else policy
 
     return nn.ModuleDict(models)
 
@@ -170,7 +203,7 @@ def _build_optimizers(config, models: nn.ModuleDict[str, nn.Module], device) -> 
     
     return optimizers
 
-def _build_dataloader(world_rank, local_rank, world_size, config, enable_dist_train):
+def _build_dataloader(config, world_rank=0, local_rank=0, world_size=0, enable_dist_train=False):
     """
     Required Config Params:
         data.datamodule.type
@@ -182,30 +215,37 @@ def _build_dataloader(world_rank, local_rank, world_size, config, enable_dist_tr
         train.save_dir
     """
     
-    # datamodule_cls = DATASET_BUILDER_REGISTRY.get(config.data.datamodule.type)
-    # dataset_factory = instantiate(datamodule_cls, params=config.data.datamodule.params, config=config)
-    # returned_product = dataset_factory.build(local_rank=local_rank, dist_enabled=enable_dist_train, save_dir=config.train.save_dir, params=config.data.datamodule.params)
+    datamodule_cls = DATASET_BUILDER_REGISTRY.get(config.data.datamodule.type)
+    dataset_factory = instantiate(datamodule_cls, params=config.data.datamodule.params, config=config)
+    returned_product = dataset_factory.build(
+                            {
+                                'local_rank': local_rank,
+                                'dist_enabled': enable_dist_train,
+                                'save_dir': config.train.save_dir
+                            },
+                            params=config.data.datamodule.params)
 
-    # if isinstance(returned_product, dict):
-    #     for key in returned_product.keys():
-    #         if key == "dataset":
-    #             dataset = returned_product[key]
-    #         elif key == 'norm_stats':
-    #             stats = returned_product[key]
-    #             if local_rank == 0:
-    #                 try:
-    #                     stats_path = os.path.join(config.train.save_dir, f"dataset_stats.pkl")
-    #                     with open(stats_path, "wb") as f:
-    #                         pickle.dump(stats, f)
-    #                 except:
-    #                     stats_path = Path(os.path.join(config.train.save_dir, f"dataset_stats.pkl")).expanduser()
-    #                     with open(stats_path, "wb") as f:
-    #                         pickle.dump(stats, f)
+    if isinstance(returned_product, dict):
+        for key in returned_product.keys():
+            if key == "dataset":
+                dataset = returned_product[key]
+            elif key == 'norm_stats':
+                stats = returned_product[key]
+                if local_rank == 0:
+                    try:
+                        stats_path = os.path.join(config.train.save_dir, f"dataset_stats.pkl")
+                        with open(stats_path, "wb") as f:
+                            pickle.dump(stats, f)
+                    except:
+                        stats_path = Path(os.path.join(config.train.save_dir, f"dataset_stats.pkl")).expanduser()
+                        with open(stats_path, "wb") as f:
+                            pickle.dump(stats, f)
+    else: 
+        dataset = returned_product
+        stats = None
 
-    # else: 
-    #     dataset = returned_product
-    repo_id = 'joon001001/igris-b-pnp-lerobot'
-    dataset = LeRobotDataset(repo_id)
+    #repo_id = 'joon001001/igris-b-pnp-lerobot'
+    #dataset = LeRobotDataset(repo_id)
 
     # When using DistributedSampler, do NOT set shuffle=True on DataLoader.
     # Shuffling is handled by the sampler (see PyTorch DDP tutorial pattern)
@@ -220,15 +260,15 @@ def _build_dataloader(world_rank, local_rank, world_size, config, enable_dist_tr
                             worker_init_fn=seed_worker,
                             drop_last=False,
                             shuffle=False)
-    return dataloader, sampler
+    return dataloader, sampler, stats
 
-def _build_trainer(local_rank, enable_dist_train, config, device) -> Trainer:
+def _build_trainer(world_size, global_rank, local_rank, enable_dist_train, config, device) -> Trainer:
     """
     Required Config Params:
         train.trainer.type
         train.trainer.params
     """
-    models = _build_models(local_rank, enable_dist_train, config, device)
+    models = _build_models(world_size, global_rank, local_rank, enable_dist_train, config, device)
     optimizers = _build_optimizers(config, models, device)
     loss_fn = _build_loss(config, device)
 
@@ -295,11 +335,14 @@ def _record(loss_dict: dict[str, Any], iterations: int):
     detached_loss = {}
     for key in loss_dict.keys():
         if isinstance(loss_dict[key], torch.Tensor):
-            detached_loss[key] = loss_dict[key].detach().cpu().item()
+            if loss_dict[key].device.type == 'cpu':
+                detached_loss[key] = loss_dict[key].item()
+            else:
+                detached_loss[key] = loss_dict[key].detach().cpu().item()
         else: 
             detached_loss[key] = loss_dict[key]
     
-    #wandb.log(detached_loss, step=iterations)
+    wandb.log(detached_loss, step=iterations)
 
 
 
@@ -333,17 +376,17 @@ def train(config_path: str) -> None:
     rank = dist.get_rank() if enable_dist_train else 0
     world_size = dist.get_world_size() if enable_dist_train else 1
 
-    # if rank == 0:
-    #     # Pass the config dictionary so you can filter by hyperparameters in the UI
-    #     # You might need to add 'project_name' to your yaml schema, or hardcode it here
-    #     project_name = config.data.datamodule.params["task_name"]
+    if rank == 0:
+        # Pass the config dictionary so you can filter by hyperparameters in the UI
+        # You might need to add 'project_name' to your yaml schema, or hardcode it here
+        project_name = config.data.datamodule.params["task_name"]
         
-    #     wandb.init(
-    #         project=project_name,
-    #         config=_params_dict(config), # Uses your helper to dump Pydantic config
-    #         name=f"{getattr(config.train, 'project_name', 'imitation_learning')}", # Optional: Readable run name
-    #         # reinit=True # Uncomment if you run multiple trainings in one script execution
-    #     )
+        wandb.init(
+            project=project_name,
+            config=_params_dict(config), # Uses your helper to dump Pydantic config
+            name=f"{getattr(config.train, f'{project_name}', 'imitation_learning')}", # Optional: Readable run name
+            # reinit=True # Uncomment if you run multiple trainings in one script execution
+        )
 
     # Same seed on all ranks for synchronizing model initialization weights
     base_seed = getattr(config.train, "seed", 0)
@@ -351,20 +394,17 @@ def train(config_path: str) -> None:
 
     if rank == 0: print(f"Global batch size = {config.data.batch_size * world_size}")
 
-    trainer = _build_trainer(local_rank, enable_dist_train, config, device)
-    _dist_barrier(enable_dist_train)
+    trainer = _build_trainer(world_size, rank, local_rank, enable_dist_train, config, device)
+    _dist_barrier(enable_dist_train, local_rank)
 
     # After models build with synchronized model initialization, offset seed for runtime randomness (Dropout, etc.)
     # This ensures distinct stochastic behavior per GPU
     set_global_seed(seed=base_seed + rank)
-
-    #dataloader, sampler = _build_dataloader(world_rank=rank, local_rank=local_rank, world_size=world_size, config=config, enable_dist_train=enable_dist_train)
-
+    _dist_barrier(enable_dist_train, local_rank)
+    dataloader, sampler, stats = _build_dataloader(config=config, world_rank=rank, local_rank=local_rank, world_size=world_size, enable_dist_train=enable_dist_train)
+    
     try:
-        if rank == 0:
-            import psutil
-            process = psutil.Process(os.getpid())
-            cpu_ram_epoch_diff = process.memory_info().rss / (1024 ** 3)
+        stats_cpu = tree_map(map_list_to_torch, stats)
 
         iterations = 0
         for epoch in range(config.train.epoch):
@@ -372,28 +412,28 @@ def train(config_path: str) -> None:
                 sampler.set_epoch(epoch)
 
             for _, data in enumerate(tqdm(dataloader, disable=(rank != 0))):
-                print(data.keys())
-                loss_dict = trainer.train_step(data=move_to_device(data, device))
+                data['action'] = (data['action'] - stats_cpu['action']['mean']) / (stats_cpu['action']['std'] + 1e-8)
+                data['observation.state'] = (data['observation.state'] - stats_cpu['observation.state']['mean']) / (stats_cpu['observation.state']['std'] + 1e-8)
+                data = cast_dtype(data, torch.float32)
+                loss_dict = trainer.train_step(data=move_to_device(data, device), epoch=epoch, total_epochs=config.train.epoch)
                 if rank == 0:
-                    loss_dict['CPU RAM Diff From Start (GB)'] = process.memory_info().rss / (1024 ** 3) - cpu_ram_epoch_diff
-                    loss_dict['Allocated GPU Memory (GB)'] = torch.cuda.memory_allocated() / 1024**3
-                    loss_dict['Reserved GPU Memory (GB)'] = torch.cuda.memory_allocated() / 1024**3
                     _record(loss_dict, iterations)
                     iterations += 1
 
-            _dist_barrier(enable_dist_train)
+            _dist_barrier(enable_dist_train, local_rank)
 
             if rank == 0:
                 print(f"Epoch {epoch} complete")
                 # Need to check inside save_checkpoints if the models are wrapped by DDP
-                _save_checkpoints(models=trainer.models, 
-                                  optimizers=trainer.optimizers, 
-                                  save_dir=config.train.save_dir, 
-                                  epoch=epoch)
+                if (epoch + 1) % config.train.save_every == 0:
+                    _save_checkpoints(models=trainer.models, 
+                                    optimizers=trainer.optimizers, 
+                                    save_dir=config.train.save_dir, 
+                                    epoch=epoch + 1)
 
             gc.collect() 
             torch.cuda.empty_cache()
-            _dist_barrier(enable_dist_train)
+            _dist_barrier(enable_dist_train, local_rank)
             
         if rank == 0: 
             print("Training finished !!")
@@ -401,7 +441,7 @@ def train(config_path: str) -> None:
     finally:
         if rank == 0:
             print("program terminating...")
-            #wandb.finish()
+            wandb.finish()
         _dist_cleanup(enable_dist_train)
 
     
@@ -410,9 +450,33 @@ def train(config_path: str) -> None:
 
 
 
+def ddp_broadcast_test():
+    dist.init_process_group("nccl", init_method="env://")
+    local_rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(local_rank)
 
+    # Make a small module and wrap in DDP to trigger broadcast_coalesced
+    m = torch.nn.Linear(16, 16, bias=False).to(local_rank)
+    ddp = DDP(m, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
 
+    # Force one barrier that is device-aware
+    dist.barrier(device_ids=[local_rank])
 
+    if dist.get_rank() == 0:
+        print("DDP broadcast init OK")
+    dist.destroy_process_group()
+
+def test():
+    dist.init_process_group("nccl", init_method="env://")
+    local_rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(local_rank)
+
+    x = torch.ones(1, device=f"cuda:{local_rank}")
+    dist.all_reduce(x)
+    if dist.get_rank() == 0:
+        print("all_reduce ok:", x.item())
+
+    dist.destroy_process_group()
 
 if __name__ == "__main__":
     try:
@@ -422,5 +486,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parse for train config .yaml file")
     parser.add_argument("--train_config", help="absolute path to the train config .yaml file.", required=True)
     args = parser.parse_args()
-
+    #test()
+    #ddp_broadcast_test()
     train(args.train_config)

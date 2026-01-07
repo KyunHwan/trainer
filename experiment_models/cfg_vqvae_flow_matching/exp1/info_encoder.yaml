@@ -1,14 +1,14 @@
 schema_version: 1
 
 params:
-  cond_proprio_dim: 62
+  cond_proprio_dim: 24
   cond_visual_dim: 1024
   use_cond_semantic: true
   num_cameras: 3
 
 
   transformer_d_model: 384
-  transformer_nhead: 16
+  transformer_nhead: 8
   transformer_dim_feedforward: 2048
   transformer_dropout: 0.2
   transformer_activation: gelu

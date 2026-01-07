@@ -7,7 +7,7 @@ params:
   use_cond_semantic: true
 
   transformer_d_model: 384
-  transformer_nhead: 16
+  transformer_nhead: 8
   transformer_dim_feedforward: 2048
   transformer_dropout: 0.2
   transformer_activation: gelu
