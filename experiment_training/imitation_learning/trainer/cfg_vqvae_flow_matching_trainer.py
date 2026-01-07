@@ -64,6 +64,7 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
         codebook_output = self.models['vqvae_codebook'](continuous_vec=posterior_cls_token)
         related_codebook_quantized_vec = codebook_output['q']
         loss['codebook_min_dist'] = codebook_output['codebook_min_dist']
+        loss['codebook_max_dist'] = codebook_output['codebook_max_dist']
 
         """ NSVQ """
         # https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9696322
