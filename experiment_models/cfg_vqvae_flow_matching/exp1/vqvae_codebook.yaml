@@ -7,7 +7,7 @@ params:
 
 model:
   graph:
-    inputs: [continuous_vec]
+    inputs: [continuous_vec, train, replacement]
     modules:
       vqvae_codebook:
         _type_: cfg_vqvae_codebook
@@ -19,5 +19,7 @@ model:
         call: module:vqvae_codebook
         kwargs:
           continuous_vec: $continuous_vec
+          train: $train
+          replacement: $replacement
     outputs: [$codebook_vec]
     return: single

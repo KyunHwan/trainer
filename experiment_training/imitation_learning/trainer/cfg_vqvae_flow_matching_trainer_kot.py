@@ -62,7 +62,7 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
                                                      )
 
         """ VQVAE Codebook """
-        codebook_output = self.models['vqvae_codebook'](continuous_vec=posterior_cls_token)
+        codebook_output = self.models['vqvae_codebook'](continuous_vec=posterior_cls_token, train=True, replacement=False)
         related_codebook_quantized_vec = codebook_output['q']
         loss['codebook_min_dist'] = codebook_output['codebook_min_dist']
         loss['codebook_max_dist'] = codebook_output['codebook_max_dist']
@@ -127,16 +127,16 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
         loss["velocity"] = velocity_loss.detach().clone().item()
         loss["Sinkhorn"] = sinkhorn_loss.detach().clone().item()
             
-        return loss
+        return loss, posterior_cls_token.detach().clone()
 
 
 
 
-    def train_step(self, data: dict[str, Any], epoch, total_epochs) -> dict[str, Any]:
+    def train_step(self, data: dict[str, Any], epoch, total_epochs, iterations) -> dict[str, Any]:
         self._ready_train()
         self._zero_grad()
 
-        loss = self.forward(data, epoch, total_epochs)
+        loss, continuous_vec = self.forward(data, epoch, total_epochs)
 
         self._backward(loss)
         self._step()
@@ -148,8 +148,13 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
                     self.update_posterior_ema()
         except:
             pass
-        
-        return self._detached_loss(loss)
+        detached_loss = self._detached_loss(loss)
+        if epoch < 10 and iterations % ((epoch + 1) * 10) == 0:
+            with torch.no_grad():
+                output = self.models['vqvae_codebook'](continuous_vec=continuous_vec, train=True, replacement=True)
+                self._reset_opt_state_rows(output['dead_indices'])
+            detached_loss['num_vecs_replaced'] = output['num_vecs_replaced']
+        return detached_loss
     
     def unwrap(self, m: nn.Module) -> nn.Module:
         # DDP / DataParallel expose `.module`; plain models don't.
@@ -195,7 +200,38 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
         detached_loss = {}
         for key in loss.keys():
             if isinstance(loss[key], torch.Tensor):
-                detached_loss[key] = loss[key].detach().cpu().item()
+                detached_loss[key] = loss[key].detach().item()
             else:
                 detached_loss[key] = loss[key]
         return detached_loss
+    
+    @torch.no_grad()
+    def _reset_opt_state_rows(self, row_indices: torch.Tensor | None):
+        """
+        Zero Adam/AdamW moments for specific rows of a 2D parameter (e.g., nn.Embedding.weight).
+
+        optimizer: torch.optim.Adam or AdamW (works for most Adam variants using exp_avg/exp_avg_sq)
+        param: the Parameter object whose state you want to reset (e.g., model.vq_codebook.weight)
+        row_indices: 1D LongTensor of row indices to reset (dead_indices)
+        """
+        if row_indices is None or row_indices.numel() == 0:
+            return
+        if self.models['vqvae_codebook'].parameters() not in self.optimizers['vqvae_codebook'].state:
+            return  # state not initialized yet (e.g., before first optimizer.step())
+
+        st = self.optimizers['vqvae_codebook'].state[self.models['vqvae_codebook'].parameters()]
+        # Indices must be on the same device as the state tensors for index_fill_
+        def _zero_rows_(t: torch.Tensor):
+            if not torch.is_tensor(t):
+                return
+            if t.ndim < 2:
+                return  # e.g., scalar step tensor; ignore
+            idx = row_indices.to(device=t.device, dtype=torch.long)
+            # zero the rows along dim 0
+            t.index_fill_(0, idx, 0)
+
+        # Standard Adam/AdamW keys
+        for key in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq", "z"):
+            if key in st:
+                _zero_rows_(st[key])
+        

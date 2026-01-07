@@ -351,7 +351,7 @@ def _record(loss_dict: dict[str, Any], iterations: int):
             if loss_dict[key].device.type == 'cpu':
                 detached_loss[key] = loss_dict[key].item()
             else:
-                detached_loss[key] = loss_dict[key].detach().cpu().item()
+                detached_loss[key] = loss_dict[key].detach().item()
         else: 
             detached_loss[key] = loss_dict[key]
     
@@ -428,11 +428,10 @@ def train(config_path: str) -> None:
                 data['action'] = (data['action'] - stats_cpu['action']['mean']) / (stats_cpu['action']['std'] + 1e-8)
                 data['observation.state'] = (data['observation.state'] - stats_cpu['observation.state']['mean']) / (stats_cpu['observation.state']['std'] + 1e-8)
                 data = cast_dtype(data, torch.float32)
-                loss_dict = trainer.train_step(data=move_to_device(data, device), epoch=epoch, total_epochs=config.train.epoch)
+                loss_dict = trainer.train_step(data=move_to_device(data, device), epoch=epoch, total_epochs=config.train.epoch, iterations=iterations)
                 if rank == 0:
                     _record(loss_dict, iterations)
-                    iterations += 1
-
+                iterations += 1 # has to be updated for all GPUs
             _dist_barrier(enable_dist_train, local_rank)
 
             if rank == 0:
