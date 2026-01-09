@@ -1,0 +1,64 @@
+plugins:
+  - "experiment_training.components.dataloader.lerobot_data"
+  - "experiment_training.components.optimizer.schedule_free_radam"
+  - "experiment_training.components.trainer.naive_flow_matching_policy_trainer"
+model:
+  find_unused_parameters: true
+  component_config_paths:
+    backbone: "experiment_models/naive_flow_matching_policy/exp1/backbone.yaml"
+    da3: "experiment_models/naive_flow_matching_policy/exp1/da3.yaml"
+    proprio_projector: "experiment_models/naive_flow_matching_policy/exp1/proprio_projector.yaml"
+    action_decoder: "experiment_models/naive_flow_matching_policy/exp1/action_decoder.yaml"
+  component_build_args:
+    backbone:
+      init: false
+      freeze: true
+    da3:
+      init: false
+      freeze: true
+    proprio_projector:
+      init: true
+      freeze: false
+    action_decoder:
+      init: true
+      freeze: false
+  component_optims:
+    proprio_projector:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.999]
+        silent_sgd_phase: true
+    action_decoder:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.999]
+        silent_sgd_phase: true
+
+data:
+  datamodule:
+    type: "lerobot_dataset_factory"
+    params:
+      task_name: 'picknplace'
+      local_files_only: false
+      root: '~/igris-b-pnp/lerobot_dataset_2/'
+      repo_id: 'joon001001/igris-b-pnp-lerobot_v2'
+      action_horizon: 40
+      obs_proprio_history: 40
+      obs_images_history: 1
+      HZ: 20
+  batch_size: 2
+  num_workers: 12
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 1
+train:
+  project_name: 'cfg_vqvae_flow_matching exp3'
+  epoch: 1000
+  load_dir: null
+  save_every: 10
+  save_dir: "~/offline_trainer/experiment_training/imitation_learning/naive_flow_matching_policy/exp1"
+  trainer: 
+    type: 'naive_flow_matching_policy_trainer'
+  

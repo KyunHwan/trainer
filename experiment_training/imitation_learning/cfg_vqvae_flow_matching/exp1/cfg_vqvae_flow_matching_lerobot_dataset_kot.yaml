@@ -1,8 +1,8 @@
 plugins:
-  - "experiment_training.imitation_learning.dataloader.lerobot_data"
-  - "experiment_training.imitation_learning.loss.l2"
-  - "experiment_training.imitation_learning.optimizer.schedule_free_radam"
-  - "experiment_training.imitation_learning.trainer.cfg_vqvae_flow_matching_trainer"
+  - "experiment_training.components.dataloader.lerobot_data"
+  - "experiment_training.components.loss.sinkhorn_knopp"
+  - "experiment_training.components.optimizer.schedule_free_radam"
+  - "experiment_training.components.trainer.cfg_vqvae_flow_matching_trainer_kot"
 model:
   find_unused_parameters: true
   component_config_paths:
@@ -10,10 +10,15 @@ model:
     vqvae_posterior: "experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_posterior.yaml"
     vqvae_prior: "experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_prior.yaml"
     vqvae_codebook: "experiment_models/cfg_vqvae_flow_matching/exp1/vqvae_codebook.yaml"
-    info_encoder: "experiment_models/cfg_vqvae_flow_matching/exp1/info_encoder.yaml"
+    #info_encoder: "experiment_models/cfg_vqvae_flow_matching/exp1/info_encoder.yaml"
+    proprio_projector: "experiment_models/cfg_vqvae_flow_matching/exp1/proprio_projector.yaml"
     action_decoder: "experiment_models/cfg_vqvae_flow_matching/exp1/action_decoder.yaml"
+    da3: "experiment_models/cfg_vqvae_flow_matching/exp1/da3.yaml"
   component_build_args:
     backbone:
+      init: false
+      freeze: true
+    da3:
       init: false
       freeze: true
     vqvae_codebook:
@@ -25,19 +30,13 @@ model:
     vqvae_prior:
       init: true
       freeze: false
-    info_encoder:
+    proprio_projector:
       init: true
       freeze: false
     action_decoder:
       init: true
       freeze: false
   component_optims:
-    backbone:
-      type: "schedule_free_radam"
-      params:
-        lr: 1e-4
-        betas: [0.9, 0.999]
-        silent_sgd_phase: true
     vqvae_posterior:
       type: "schedule_free_radam"
       params:
@@ -56,7 +55,7 @@ model:
         lr: 1e-4
         betas: [0.9, 0.999]
         silent_sgd_phase: true
-    info_encoder:
+    proprio_projector:
       type: "schedule_free_radam"
       params:
         lr: 1e-4
@@ -75,27 +74,32 @@ data:
     type: "lerobot_dataset_factory"
     params:
       task_name: 'picknplace'
-      local_files_only: true
-      root: '~/igris-b-pnp/lerobot_dataset/data'
-      repo_id: 'joon001001/igris-b-pnp-lerobot'
+      local_files_only: false
+      root: '~/igris-b-pnp/lerobot_dataset_2/'
+      repo_id: 'joon001001/igris-b-pnp-lerobot_v2'
       action_horizon: 40
       obs_proprio_history: 40
       obs_images_history: 1
       HZ: 20
-  batch_size: 224
+  batch_size: 2
   num_workers: 12
   pin_memory: true
   persistent_workers: true
   prefetch_factor: 1
 train:
-  project_name: 'cfg_vqvae_flow_matching exp1'
+  project_name: 'cfg_vqvae_flow_matching exp3'
   epoch: 1000
   load_dir: null
   save_every: 10
   save_dir: "~/offline_trainer/experiment_training/imitation_learning/cfg_vqvae_flow_matching/exp1"
   trainer: 
-    type: 'cfg_vqvae_flow_matching_trainer'
+    type: 'cfg_vqvae_flow_matching_trainer_kot'
   loss:
-    type: "l2_loss"
+    type: "sinkhorn_knopp"
     params:
-      reduction: "sum"
+      p: 1
+      lam_state: 0.2
+      blur: 0.004
+      debias: True       
+      backend: "auto"
+      scaling: 0.5

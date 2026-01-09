@@ -289,7 +289,9 @@ def _build_trainer(world_size, global_rank, local_rank, enable_dist_train, confi
     """
     models = _build_models(world_size, global_rank, local_rank, enable_dist_train, config, device)
     optimizers = _build_optimizers(config, models, device)
-    loss_fn = _build_loss(config, device)
+    loss_fn = None
+    if config.train.loss is not None:
+        loss_fn = _build_loss(config, device)
 
     trainer_cls = TRAINER_REGISTRY.get(config.train.trainer.type)
     trainer = instantiate(

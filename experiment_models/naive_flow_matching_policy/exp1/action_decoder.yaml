@@ -1,0 +1,49 @@
+schema_version: 1
+
+params:
+  action_dim: 24
+  action_chunk_size: 40
+  use_cond_semantic_projection: false
+  use_cond_semantic: false
+  cond_semantic_dim: null
+
+  transformer_d_model: 1024
+  transformer_nhead: 16
+  transformer_dim_feedforward: 4096
+  transformer_dropout: 0.2
+  transformer_activation: gelu
+  transformer_batch_first: true
+  transformer_tgt_is_causal: true
+  transformer_num_layers: 14
+
+  
+
+model:
+  graph:
+    inputs: [time, noise, memory_input, discrete_semantic_input]
+    modules:
+      action_decoder:
+        _type_: cfg_vqvae_action_decoder
+        action_dim: ${params.action_dim}
+        transformer_d_model: ${params.transformer_d_model}
+        transformer_nhead: ${params.transformer_nhead}
+        transformer_dim_feedforward: ${params.transformer_dim_feedforward}
+        transformer_dropout: ${params.transformer_dropout}
+        transformer_activation: ${params.transformer_activation}
+        transformer_batch_first: ${params.transformer_batch_first}
+        transformer_tgt_is_causal: ${params.transformer_tgt_is_causal}
+        transformer_num_layers: ${params.transformer_num_layers}
+        transformer_action_chunk_size: ${params.action_chunk_size}
+        use_cond_semantic_projection: ${params.use_cond_semantic_projection}
+        use_cond_semantic: ${params.use_cond_semantic}
+        cond_semantic_dim: ${params.cond_semantic_dim}
+    nodes:
+      - name: decoded_action
+        call: module:action_decoder
+        kwargs:
+          time: $time
+          noise: $noise
+          memory_input: $memory_input
+          discrete_semantic_input: $discrete_semantic_input
+    outputs: [$decoded_action]
+    return: single

@@ -1,0 +1,22 @@
+schema_version: 1
+
+params:
+  resize_method: 'forced'
+
+model:
+  graph:
+    inputs: [image, export_feat_layers]
+    modules:
+      da3:
+        _type_: da3
+        resize_method: ${params.resize_method}
+
+    nodes:
+      - name: da3
+        call: module:da3
+        kwargs:
+          image: $image
+          export_feat_layers: $export_feat_layers
+    outputs: [$da3]
+    return: single  # or omit to infer tuple
+

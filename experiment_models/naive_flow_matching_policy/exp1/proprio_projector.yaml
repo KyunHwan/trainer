@@ -1,0 +1,24 @@
+schema_version: 1
+
+params:
+  cond_proprio_dim: 48
+  transformer_d_model: 1024
+
+
+model:
+  graph:
+    inputs: [cond_proprio, cond_visual]
+    modules:
+      proprio_projector:
+        _type_: proprio_projector
+        cond_proprio_dim: ${params.cond_proprio_dim}
+        transformer_d_model: ${params.transformer_d_model}
+    
+    nodes:
+      - name: proprio_projection
+        call: module:proprio_projector
+        kwargs:
+          cond_proprio: $cond_proprio
+          cond_visual: $cond_visual
+    outputs: [$proprio_projection]
+    return: single
