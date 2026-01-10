@@ -24,6 +24,7 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         
         self.dist = torch.distributions.Beta(1.0, 1.5) # as in pi0-paper by physical intelligence
         self.probPath = AffineProbPath(CondOTScheduler())
+        self.device = device
         
         self.models=models
         self.optimizers=optimizers
@@ -94,58 +95,29 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         """ Flow Matching """
         noise = torch.randn_like(data['action'], device=data['action'].device)
         time = self.dist.sample((data['action'].shape[0],)).to(data['action'].device)
-        # if time.ndim > 1:
-        #     time_flat = time.squeeze(-1)
-        # else:
-        #    time_flat = time
         sample = self.probPath.sample(t=time, x_0=noise, x_1=data['action'])
 
         x_t = sample.x_t
         dx_t = sample.dx_t
-        # dx_t_hat_full = torch.empty_like(dx_t)     # (B, T, A)
 
-        # for e in range(E):
-        #     idx = (expert_ids == e).nonzero(as_tuple=True)[0]  # indices routed to expert e
-        #     if idx.numel() == 0:
-        #         continue
+        concat_moe_actions = self.models['moe_action_decoder'](
+                                                time=torch.cat([time, torch.zeros_like(time)], dim=0), 
+                                                noise=torch.cat([x_t, noise], dim=0), 
+                                                memory_input=torch.cat([torch.cat([einops.rearrange(depth_head, 'b n h w d -> b (n h w) d'),
+                                                                        conditioning_info], dim=1),
+                                                                        torch.cat([einops.rearrange(depth_head, 'b n h w d -> b (n h w) d'),
+                                                                        conditioning_info], dim=1)], dim=0),
+                                                discrete_semantic_input=None,)
+        concat_dx_t = einops.rearrange(torch.stack([dx_t for i in range(E)], dim=0), 'e b s d -> b e s d')
+        err = einops.rearrange((concat_dx_t - concat_moe_actions[:B]).pow(2), 'b e s d -> b e (s d)').sum(dim=-1)
 
-        #     # Slice per-expert mini-batch
-        #     time_e  = time_flat[idx]          # (Be,)
-        #     x_t_e   = x_t[idx]                # (Be, T, A)
-        #     mem_e   = memory_input[idx]       # (Be, S, D)
-        #     dx_t_e = dx_t_e[idx]
-
-        #     if discrete_semantic_input is None:
-        #         sem_e = None
-        #     else:
-        #         sem_e = discrete_semantic_input[idx]  # (Be, D) or (Be, K, D)
-
-        #     # Run only the selected expert on its sub-batch
-        #     dx_hat_e = self.models["moe_action_decoder"](
-        #         expert_id=e,
-        #         time=time_e,
-        #         noise=x_t_e,
-        #         memory_input=mem_e,
-        #         discrete_semantic_input=sem_e,
-        #     )  # (Be, T, A)
-
-        #     # Scatter back to original batch positions
-        #     dx_t_hat_full[idx] = dx_hat_e
-
-        err = torch.empty_like(gating)
-        for i in range(E):
-            dx_t_hat_i = self.models['moe_action_decoder'](
-                                                    expert_id=i,
-                                                    time=time, 
-                                                    noise=x_t, 
-                                                    memory_input=torch.cat([einops.rearrange(depth_head, 'b n h w d -> b (n h w) d'),
-                                                                            conditioning_info], dim=1),
-                                                    discrete_semantic_input=None,)
-            
-            err_i = (dx_t - dx_t_hat_i).pow(2)
-            err[: , i] = err_i.view(err_i.shape[0], -1).sum(dim=1)
-        print(err.shape)
         moe_loss = (err * gating).sum(dim=1).mean()
+
+        averaged_moe_actions = torch.sum(concat_moe_actions[B:] * gating[:, :, None, None], dim=1)
+        sinkhorn_loss = self.loss(pred_action = noise + averaged_moe_actions, 
+                                  target_action = data['action'], 
+                                  state_pred = data['observation.state'], 
+                                  state_target = data['observation.state'])
 
         # EMA
         # For prior training --> since posterior is a moving target, naively doing l2 distance between the two destabilizes prior learning 
@@ -158,30 +130,12 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
                                                  )  # e.g., returns posterior_cls_token_ema
             loss["True_prior_posterior"] = torch.sum(torch.pow(prior_cls_token.detach().clone() - posterior_cls_token.detach().clone(), 2), dim=-1, keepdim=False).mean().item()
         
-        moe_actions = torch.empty((x_t.shape[0], E, x_t.shape[1], x_t.shape[2]))
-        for i in range(E):
-            dx_t_hat_i = self.models['moe_action_decoder'](
-                            expert_id=i,
-                            time=torch.zeros_like(time), 
-                            noise=noise, 
-                            memory_input=torch.cat([einops.rearrange(depth_head, 'b n h w d -> b (n h w) d'),
-                                                    conditioning_info], dim=1),
-                            discrete_semantic_input=None,)
-            moe_actions[:, i, :, :] = dx_t_hat_i
-
-        
-    
-        sinkhorn_loss = self.loss(pred_action = noise + moe_actions * gating, 
-                                  target_action = data['action'], 
-                                  state_pred = data['observation.state'], 
-                                  state_target = data['observation.state'])
-        
         # Enforces the latent vectors to commit to respective vectors in the codebook
         commitment_loss = (posterior_cls_token - related_codebook_quantized_vec.detach()).pow(2).view(-1, posterior_cls_token.shape[-1]).sum(dim=-1).mean()
         
-        loss["Total"] = sinkhorn_loss #velocity_loss + 0.2 * sinkhorn_loss + 0.25 * commitment_loss
+        loss["Total"] = moe_loss + 0.2 * sinkhorn_loss + 0.25 * commitment_loss
         loss["EMA_prior_posterior"] = torch.sum(torch.pow(prior_cls_token - posterior_target, 2).view(-1, prior_cls_token.shape[-1]), dim=-1, keepdim=False).mean()
-        loss["MoE"] = moe_loss.detach().clone().item()
+        loss["velocity"] = moe_loss.detach().clone().item()
         loss["Sinkhorn"] = sinkhorn_loss.detach().clone().item()
         loss["posterior_codebook"] = commitment_loss.detach().clone().item()
             
@@ -207,7 +161,7 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         except:
             pass
         detached_loss = self._detached_loss(loss)
-        if epoch < 2 and iterations % ((epoch + 1) * 10) == 0:
+        if epoch < 10 and iterations % ((epoch + 1) * 10) == 0:
             with torch.no_grad():
                 output = self.models['vqvae_codebook'](continuous_vec=continuous_vec, train=True, replacement=True)
                 self._reset_opt_state_rows(output['dead_indices'])

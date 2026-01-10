@@ -4,7 +4,8 @@ params:
   num_experts: 5
   action_dim: 24
   action_chunk_size: 40
-  use_cond_semantic: true
+  use_cond_semantic: false
+  cond_semantic_dim: null
 
   transformer_d_model: 1024
   transformer_nhead: 16
@@ -35,7 +36,7 @@ model:
         transformer_num_layers: ${params.transformer_num_layers}
         transformer_action_chunk_size: ${params.action_chunk_size}
         use_cond_semantic: ${params.use_cond_semantic}
-        cond_semantic_dim: ${params.transformer_d_model}
+        cond_semantic_dim: ${params.cond_semantic_dim}
     nodes:
       - name: decoded_action
         call: module:vfp_moe

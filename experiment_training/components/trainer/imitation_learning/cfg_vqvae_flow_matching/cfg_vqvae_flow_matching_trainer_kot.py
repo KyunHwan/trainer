@@ -106,11 +106,15 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
         x_t = sample.x_t
         dx_t = sample.dx_t
 
-        dx_t_hat = self.models['action_decoder'](time=time, 
-                                                 noise=x_t, 
-                                                 memory_input=torch.cat([einops.rearrange(depth_head, 'b n h w d -> b (n h w) d'),
+        batch_size = noise.shape[0]
+
+        concat_dx_t_hat = self.models['action_decoder'](time=torch.cat([time, torch.zeros_like(time)], dim=0), 
+                                                 noise=torch.cat([x_t, noise], dim=0), 
+                                                 memory_input=torch.cat([torch.cat([einops.rearrange(depth_head, 'b n h w d -> b (n h w) d'),
                                                                          conditioning_info], dim=1),
-                                                 discrete_semantic_input=simulated_quantized_vec,)
+                                                                         torch.cat([einops.rearrange(depth_head, 'b n h w d -> b (n h w) d'),
+                                                                         conditioning_info], dim=1)], dim=0),
+                                                 discrete_semantic_input=torch.cat([simulated_quantized_vec, simulated_quantized_vec], dim=0))
         
         # EMA
         # For prior training --> since posterior is a moving target, naively doing l2 distance between the two destabilizes prior learning 
@@ -123,15 +127,10 @@ class CFG_VQVAE_Flow_Matching_Trainer(nn.Module):
                                                  )  # e.g., returns posterior_cls_token_ema
             loss["True_prior_posterior"] = torch.sum(torch.pow(prior_cls_token.detach().clone() - posterior_cls_token.detach().clone(), 2), dim=-1, keepdim=False).mean().item()
         
-        err = (dx_t - dx_t_hat).pow(2)
+        err = (dx_t - concat_dx_t_hat[:batch_size]).pow(2)
         velocity_loss = err.view(err.shape[0], -1).sum(dim=1).mean()
     
-        sinkhorn_loss = self.loss(pred_action = noise + self.models['action_decoder'](
-                                                            time = torch.zeros_like(time), 
-                                                            noise = noise, 
-                                                            memory_input = torch.cat([einops.rearrange(depth_head, 'b n h w d -> b (n h w) d'),
-                                                                         conditioning_info], dim=1),
-                                                            discrete_semantic_input=simulated_quantized_vec,), 
+        sinkhorn_loss = self.loss(pred_action = noise + concat_dx_t_hat[batch_size:], 
                                      target_action = data['action'], 
                                      state_pred = data['observation.state'], 
                                      state_target = data['observation.state'])
