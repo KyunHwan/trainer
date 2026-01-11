@@ -1,7 +1,7 @@
 schema_version: 1
 
 params:
-  num_experts: 5
+  num_experts: 4
   action_dim: 24
   action_chunk_size: 40
   use_cond_semantic: false
@@ -14,7 +14,7 @@ params:
   transformer_activation: gelu
   transformer_batch_first: true
   transformer_tgt_is_causal: true
-  transformer_num_layers: 6
+  transformer_num_layers: 7
 
   
 

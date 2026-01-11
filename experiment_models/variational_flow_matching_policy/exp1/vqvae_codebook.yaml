@@ -1,7 +1,7 @@
 schema_version: 1
 
 params:
-  num_q_vectors: 16
+  num_q_vectors: 32
   vec_dim: 1024
 
 

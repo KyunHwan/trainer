@@ -2,7 +2,7 @@ schema_version: 1
 
 params:
   input_dim: 1024
-  num_experts: 5
+  num_experts: 4
 
 
 model:

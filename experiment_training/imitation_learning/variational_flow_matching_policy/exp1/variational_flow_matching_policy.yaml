@@ -100,7 +100,7 @@ train:
   project_name: 'variational_flow_matching_policy exp3'
   epoch: 1000
   load_dir: null
-  save_every: 10
+  save_every: 3
   save_dir: "~/offline_trainer/experiment_training/imitation_learning/variational_flow_matching_policy/exp1"
   trainer: 
     type: 'variational_flow_matching_policy_trainer'

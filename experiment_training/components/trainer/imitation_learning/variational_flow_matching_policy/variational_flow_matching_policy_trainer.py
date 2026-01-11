@@ -161,7 +161,7 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         except:
             pass
         detached_loss = self._detached_loss(loss)
-        if epoch < 10 and iterations % ((epoch + 1) * 10) == 0:
+        if epoch < 1 and iterations % ((epoch + 1) * 20) == 0:
             with torch.no_grad():
                 output = self.models['vqvae_codebook'](continuous_vec=continuous_vec, train=True, replacement=True)
                 self._reset_opt_state_rows(output['dead_indices'])

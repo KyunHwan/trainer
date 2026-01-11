@@ -13,7 +13,7 @@ params:
   transformer_activation: gelu
   transformer_batch_first: true
   transformer_tgt_is_causal: true
-  transformer_num_layers: 16
+  transformer_num_layers: 10
 
   
 
