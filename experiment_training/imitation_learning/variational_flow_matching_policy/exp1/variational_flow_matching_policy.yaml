@@ -8,7 +8,7 @@ model:
   component_config_paths:
     backbone: "experiment_models/variational_flow_matching_policy/exp1/backbone.yaml"
     da3: "experiment_models/variational_flow_matching_policy/exp1/da3.yaml"
-    vqvae_codebook: "experiment_models/variational_flow_matching_policy/exp1/vqvae_codebook.yaml"
+    #vqvae_codebook: "experiment_models/variational_flow_matching_policy/exp1/vqvae_codebook.yaml"
     vqvae_posterior: "experiment_models/variational_flow_matching_policy/exp1/vqvae_posterior.yaml"
     vqvae_prior: "experiment_models/variational_flow_matching_policy/exp1/vqvae_prior.yaml"
     gate: "experiment_models/variational_flow_matching_policy/exp1/gate.yaml"
@@ -22,9 +22,9 @@ model:
     da3:
       init: false
       freeze: true
-    vqvae_codebook:
-      init: false
-      freeze: false
+    # vqvae_codebook:
+    #   init: false
+    #   freeze: false
     vqvae_posterior:
       init: true
       freeze: false
@@ -41,12 +41,12 @@ model:
       init: true
       freeze: false
   component_optims:
-    vqvae_codebook:
-      type: "schedule_free_radam"
-      params:
-        lr: 1e-4
-        betas: [0.9, 0.999]
-        silent_sgd_phase: true
+    # vqvae_codebook:
+    #   type: "schedule_free_radam"
+    #   params:
+    #     lr: 1e-4
+    #     betas: [0.9, 0.999]
+    #     silent_sgd_phase: true
     vqvae_posterior:
       type: "schedule_free_radam"
       params:
@@ -86,7 +86,7 @@ data:
       task_name: 'picknplace'
       local_files_only: false
       root: '.'
-      repo_id: 'joon001001/igris-b-pnp_v3'
+      repo_id: 'joon001001/igris-b-pnp_v3.1'
       action_horizon: 40
       obs_proprio_history: 40
       obs_images_history: 1
@@ -101,7 +101,7 @@ train:
   epoch: 1000
   load_dir: null
   save_every: 3
-  save_dir: "~/offline_trainer/experiment_training/imitation_learning/variational_flow_matching_policy/exp1"
+  save_dir: "experiment_training/imitation_learning/variational_flow_matching_policy/exp1"
   trainer: 
     type: 'variational_flow_matching_policy_trainer'
   loss:

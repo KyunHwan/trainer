@@ -39,6 +39,9 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
             p.requires_grad_(False)
         self.posterior_ema_factor = 0.999
 
+        self.velocity_loss_ema = 0.0
+        self.velocity_loss_ema_factor = 0.995
+
     def forward(self, data: dict[str, Any], epoch, total_epochs, iterations) -> dict[str, torch.Tensor]:
         loss = {}
 
@@ -63,6 +66,7 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
                                                              cond_semantic=head_image_semantic,
                                                              action = data['action']
                                                              )
+        reparam_posterior_cls_token = posterior_cls_token + torch.randn_like(posterior_cls_token)
 
         """ VQVAE Prior """
         prior_cls_token = self.models['vqvae_prior'](cond_proprio=data['observation.state'],
@@ -70,20 +74,9 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
                                                      cond_semantic=head_image_semantic,
                                                      action = None
                                                      )
+        
+        kl = torch.pow(prior_cls_token - posterior_cls_token, 2).squeeze().sum(dim=1).mean()
 
-        """ VQVAE Codebook """
-        codebook_output = self.models['vqvae_codebook'](continuous_vec=posterior_cls_token, train=True, replacement=False)
-        related_codebook_quantized_vec = codebook_output['q']
-        loss['codebook_min_dist'] = codebook_output['codebook_min_dist']
-        loss['codebook_max_dist'] = codebook_output['codebook_max_dist']
-
-        """ NSVQ """
-        # https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9696322
-        noise_vec = torch.randn_like(posterior_cls_token, device=posterior_cls_token.device)
-        normalized_noise_vec = F.normalize(noise_vec, p=2, dim=-1)
-        distance_magnitude = torch.norm(posterior_cls_token - related_codebook_quantized_vec, p=2, dim=-1, keepdim=True)
-        simulated_quantized_vec = posterior_cls_token + normalized_noise_vec * distance_magnitude
-         
         """ Proprio Projection """
         # Assumes that proprio feature dimension will be matched to that of visual
         conditioning_info = self.models['proprio_projector'](cond_proprio=data['observation.state'],
@@ -93,7 +86,8 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
                                                                                     dim=1),)
 
         """ Gating """
-        gating = self.models['gate'](simulated_quantized_vec)
+        #gating = self.models['gate'](posterior_cls_token)
+        gating = self.models['gate'](reparam_posterior_cls_token)
         B, E = gating.shape
         # expert_ids = gating.argmax(dim=1)          # (B,) each element in [0, E-1]
 
@@ -114,9 +108,8 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
                                                                         conditioning_info], dim=1)], dim=0),
                                                 discrete_semantic_input=None,)
         concat_dx_t = einops.rearrange(torch.stack([dx_t for i in range(E)], dim=0), 'e b s d -> b e s d')
-        err = einops.rearrange((concat_dx_t - concat_moe_actions[:B]).pow(2), 'b e s d -> b e (s d)').sum(dim=-1)
-
-        moe_loss = (err * gating).sum(dim=1).mean()
+        err = einops.rearrange((concat_dx_t - concat_moe_actions[:B]).pow(2), 'b e s d -> b e (s d)')#.sum(dim=-1)
+        moe_loss = (err * gating[:, :, None]).sum(dim=1).mean()
 
         averaged_moe_actions = torch.sum(concat_moe_actions[B:] * gating[:, :, None, None], dim=1)
         sinkhorn_loss = self.loss(pred_action = noise + averaged_moe_actions, 
@@ -125,18 +118,15 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
                                   state_target = data['observation.state'])
 
         """ EMA """
-        # For prior training --> since posterior is a moving target, naively doing l2 distance between the two destabilizes prior learning 
-        with torch.no_grad():
-            self.posterior_ema.eval()
-            posterior_target = self.posterior_ema(cond_proprio=data['observation.state'],
-                                                  cond_visual=head_image_features,
-                                                  cond_semantic=head_image_semantic,
-                                                  action = data['action']
-                                                 )  # e.g., returns posterior_cls_token_ema
-            loss["True_prior_posterior"] = torch.sum(torch.pow(prior_cls_token.detach().clone() - posterior_cls_token.detach().clone(), 2), dim=-1, keepdim=False).mean().item()
-        
-        # Enforces the latent vectors to commit to respective vectors in the codebook
-        commitment_loss = (posterior_cls_token - related_codebook_quantized_vec.detach()).pow(2).view(-1, posterior_cls_token.shape[-1]).sum(dim=-1).mean()
+        # # For prior training --> since posterior is a moving target, naively doing l2 distance between the two destabilizes prior learning 
+        # with torch.no_grad():
+        #     self.posterior_ema.eval()
+        #     posterior_target = self.posterior_ema(cond_proprio=data['observation.state'],
+        #                                           cond_visual=head_image_features,
+        #                                           cond_semantic=head_image_semantic,
+        #                                           action = data['action']
+        #                                          )  # e.g., returns posterior_cls_token_ema
+        #     loss["True_prior_posterior"] = torch.pow(prior_cls_token.detach().clone() - posterior_cls_token.detach().clone(), 2).mean().item()
         
         """ Activated Expert """
         with torch.no_grad():
@@ -159,27 +149,30 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         loss["Most Frequently Activated Expert"] = winner_id
         loss["Expected Activated Expert"] = expected_expert_id
 
-        """ Uniform Dist Regularization for Gating """
-        gating_sum = gating.sum(dim=0)                 # (E,)
-        local_B = torch.tensor([B], device=self.device, dtype=torch.float32)
+        # """ Uniform Dist Regularization for Gating """
+        # gating_sum = gating.sum(dim=0)                 # (E,)
+        # local_B = torch.tensor([B], device=self.device, dtype=torch.float32)
 
-        p_bar = gating_sum / local_B.clamp_min(1.0)          # (E,)
-        p_bar = p_bar.clamp_min(1e-8)
+        # p_bar = gating_sum / local_B.clamp_min(1.0)          # (E,)
+        # p_bar = p_bar.clamp_min(1e-8)
 
-        # KL(p_bar || uniform)
-        log_u = -math.log(E)
-        kl = (p_bar * (p_bar.log() - log_u)).sum()
+        # # KL(p_bar || uniform)
+        # log_u = -math.log(E)
+        # kl = (p_bar * (p_bar.log() - log_u)).sum()
 
-        loss["Total"] = moe_loss + 0.2 * sinkhorn_loss + 0.25 * commitment_loss + 10000 * math.pow(0.1, iterations/4500) * kl
-        loss["Gating_Uniform"] = kl.detach().clone().item()
-        loss["EMA_prior_posterior"] = torch.sum(torch.pow(prior_cls_token - posterior_target, 2).view(-1, prior_cls_token.shape[-1]), dim=-1, keepdim=False).mean()
+        self.velocity_loss_ema = self.velocity_loss_ema_factor * self.velocity_loss_ema + (1.0 - self.velocity_loss_ema_factor) * (moe_loss.detach().clone().item() + 0.2 * sinkhorn_loss.detach().clone().item()) \
+                                 if not None else moe_loss.detach().clone().item() + 0.2 * sinkhorn_loss.detach().clone().item()
+        
+        #loss["Total"] = moe_loss + 0.2 * sinkhorn_loss +  max(math.pow(0.1, iterations/13115), 0.1) * self.velocity_loss_ema * kl
+        #loss["EMA_prior_posterior"] = torch.pow(prior_cls_token - posterior_target.detach(), 2).mean()
+        #loss["Gating_Uniform"] = kl.detach().clone().item()
+        
+        loss["Total"] = moe_loss + 0.2 * sinkhorn_loss + kl
+        loss["prior_posterior"] = kl.detach().clone().item()
         loss["velocity"] = moe_loss.detach().clone().item()
         loss["Sinkhorn"] = sinkhorn_loss.detach().clone().item()
-        loss["posterior_codebook"] = commitment_loss.detach().clone().item()
 
-        
-            
-        return loss, posterior_cls_token.detach().clone()
+        return loss 
 
 
 
@@ -188,24 +181,19 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         self._ready_train()
         self._zero_grad()
 
-        loss, continuous_vec = self.forward(data, epoch, total_epochs, iterations)
+        loss = self.forward(data, epoch, total_epochs, iterations)
 
         self._backward(loss)
         self._step()
         
-        try:
-            if self.posterior_ema is not None:
-                # IMPORTANT: update EMA after optimizer step such that it's when the weights have been synced across GPUs
-                with torch.no_grad():
-                    self.update_posterior_ema()
-        except:
-            pass
+        # try:
+        #     if self.posterior_ema is not None:
+        #         # IMPORTANT: update EMA after optimizer step such that it's when the weights have been synced across GPUs
+        #         with torch.no_grad():
+        #             self.update_posterior_ema()
+        # except:
+        #     pass
         detached_loss = self._detached_loss(loss)
-        if epoch < 1 and iterations % ((epoch + 1) * 10) == 0:
-            with torch.no_grad():
-                output = self.models['vqvae_codebook'](continuous_vec=continuous_vec, train=True, replacement=True)
-                self._reset_opt_state_rows(output['dead_indices'])
-            detached_loss['num_vecs_replaced'] = output['num_vecs_replaced']
         return detached_loss
     
     def unwrap(self, m: nn.Module) -> nn.Module:
@@ -250,34 +238,3 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
             else:
                 detached_loss[key] = loss[key]
         return detached_loss
-    
-    @torch.no_grad()
-    def _reset_opt_state_rows(self, row_indices: torch.Tensor | None):
-        """
-        Zero Adam/AdamW moments for specific rows of a 2D parameter (e.g., nn.Embedding.weight).
-
-        optimizer: torch.optim.Adam or AdamW (works for most Adam variants using exp_avg/exp_avg_sq)
-        param: the Parameter object whose state you want to reset (e.g., model.vq_codebook.weight)
-        row_indices: 1D LongTensor of row indices to reset (dead_indices)
-        """
-        if row_indices is None or row_indices.numel() == 0:
-            return
-        if self.models['vqvae_codebook'].parameters() not in self.optimizers['vqvae_codebook'].state:
-            return  # state not initialized yet (e.g., before first optimizer.step())
-
-        st = self.optimizers['vqvae_codebook'].state[self.models['vqvae_codebook'].parameters()]
-        # Indices must be on the same device as the state tensors for index_fill_
-        def _zero_rows_(t: torch.Tensor):
-            if not torch.is_tensor(t):
-                return
-            if t.ndim < 2:
-                return  # e.g., scalar step tensor; ignore
-            idx = row_indices.to(device=t.device, dtype=torch.long)
-            # zero the rows along dim 0
-            t.index_fill_(0, idx, 0)
-
-        # Standard Adam/AdamW keys
-        for key in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq", "z"):
-            if key in st:
-                _zero_rows_(st[key])
-        
