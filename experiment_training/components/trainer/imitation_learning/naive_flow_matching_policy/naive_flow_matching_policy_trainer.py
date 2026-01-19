@@ -74,9 +74,8 @@ class Naive_Flow_Matching_Policy_Trainer(nn.Module):
                                                                          conditioning_info], dim=1),
                                                  discrete_semantic_input=head_image_semantic,)
         
-        
         err = (dx_t - dx_t_hat).pow(2)
-        velocity_loss = err.view(err.shape[0], -1).sum(dim=1).mean()
+        velocity_loss = err.mean()
         
         loss["velocity"] = velocity_loss
             

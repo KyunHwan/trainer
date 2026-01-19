@@ -41,14 +41,14 @@ data:
     type: "lerobot_dataset_factory"
     params:
       task_name: 'picknplace'
-      local_files_only: true
-      root: '~/../mnt/igris-b-pnp/lerobot_dataset_v3'
-      repo_id: 'joon001001/igris-b-pnp-lerobot_v3'
+      local_files_only: false
+      root: '.'
+      repo_id: 'joon001001/igris-b-pnp_v3.1'
       action_horizon: 40
       obs_proprio_history: 40
       obs_images_history: 1
       HZ: 20
-  batch_size: 48
+  batch_size: 112
   num_workers: 12
   pin_memory: true
   persistent_workers: true

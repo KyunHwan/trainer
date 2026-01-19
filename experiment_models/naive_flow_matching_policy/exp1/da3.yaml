@@ -1,7 +1,7 @@
 schema_version: 1
 
 params:
-  resize_method: 'forced'
+  resize_method: 'auto'
 
 model:
   graph:
