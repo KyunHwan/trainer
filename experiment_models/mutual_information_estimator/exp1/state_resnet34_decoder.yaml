@@ -1,0 +1,39 @@
+schema_version: 1
+
+params:
+  out_channels: 3
+  final_activation: "sigmoid"
+  num_images: 3
+  img_embedding_dim: 24
+  state_embedding_dim: 24
+  hidden_dim: 1024
+  state_dim: 24
+  state_chunk: 40
+  img_size: 128
+  input_channels: 512
+
+model:
+  graph:
+    inputs: [embedding]
+    modules:
+      state_decoder:
+        _type_: state_decoder
+        out_channels: ${params.out_channels}
+        final_activation: ${params.final_activation}
+        num_images: ${params.num_images}
+        img_embedding_dim: ${params.img_embedding_dim}
+        state_embedding_dim: ${params.state_embedding_dim}
+        hidden_dim: ${params.hidden_dim}
+        state_dim: ${params.state_dim}
+        state_chunk: ${params.state_chunk}
+        img_size: ${params.img_size}
+        input_channels: ${params.input_channels}
+
+    nodes:
+      - name: state_decoder
+        call: module:state_decoder
+        kwargs:
+          embedding: $embedding
+    outputs: [$state_decoder]
+    return: single  # or omit to infer tuple
+

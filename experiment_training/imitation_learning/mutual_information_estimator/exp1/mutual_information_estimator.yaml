@@ -1,0 +1,76 @@
+plugins:
+  - "experiment_training.components.dataloader.lerobot_data"
+  - "experiment_training.components.optimizer.schedule_free_radam"
+  - "experiment_training.components.trainer.imitation_learning.mutual_information_estimator.mutual_information_estimator_trainer"
+model:
+  find_unused_parameters: true
+  component_config_paths:
+    action_decoder: "experiment_models/mutual_information_estimator/exp1/action_decoder.yaml"
+    action_encoder: "experiment_models/mutual_information_estimator/exp1/action_encoder.yaml"
+    state_encoder: "experiment_models/mutual_information_estimator/exp1/state_resnet34_encoder.yaml"
+    state_decoder: "experiment_models/mutual_information_estimator/exp1/state_resnet34_decoder.yaml"
+  component_build_args:
+    action_decoder:
+      init: true
+      freeze: false
+    action_encoder:
+      init: true
+      freeze: false
+    state_encoder:
+      init: true
+      freeze: false
+    state_decoder:
+      init: true
+      freeze: false
+  component_optims:
+    action_decoder:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.999]
+        silent_sgd_phase: true
+    action_encoder:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.999]
+        silent_sgd_phase: true
+    state_encoder:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.999]
+        silent_sgd_phase: true
+    state_decoder:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.999]
+        silent_sgd_phase: true
+
+data:
+  datamodule:
+    type: "lerobot_dataset_factory"
+    params:
+      task_name: 'picknplace'
+      local_files_only: false
+      root: '.'
+      repo_id: 'joon001001/igris-b-pnp_v3.1'
+      action_horizon: 40
+      obs_proprio_history: 40
+      obs_images_history: 1
+      HZ: 20
+  batch_size: 1
+  num_workers: 12
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 1
+train:
+  project_name: 'mutual_information_estimator exp1'
+  epoch: 1000
+  load_dir: null
+  save_every: 5
+  save_dir: "experiment_training/imitation_learning/mutual_information_estimator/exp1"
+  trainer: 
+    type: 'mutual_information_estimator_trainer'
+  

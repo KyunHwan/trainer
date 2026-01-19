@@ -1,0 +1,29 @@
+schema_version: 1
+
+params:
+  final_activation: "sigmoid"
+  embedding_dim: 24
+  hidden_dim: 1024
+  action_dim: 24
+  action_chunk: 40
+
+model:
+  graph:
+    inputs: [embedding]
+    modules:
+      a_decoder:
+        _type_: a_decoder
+        final_activation: ${params.final_activation}
+        embedding_dim: ${params.embedding_dim}
+        hidden_dim: ${params.hidden_dim}
+        action_dim: ${params.action_dim}
+        action_chunk: ${params.action_chunk}
+
+    nodes:
+      - name: a_decoder
+        call: module:a_decoder
+        kwargs:
+          embedding: $embedding
+    outputs: [$a_decoder]
+    return: single  # or omit to infer tuple
+
