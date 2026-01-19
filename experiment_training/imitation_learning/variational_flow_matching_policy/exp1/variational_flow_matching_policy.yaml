@@ -91,7 +91,7 @@ data:
       obs_proprio_history: 40
       obs_images_history: 1
       HZ: 20
-  batch_size: 16
+  batch_size: 40
   num_workers: 12
   pin_memory: true
   persistent_workers: true
@@ -99,7 +99,7 @@ data:
 train:
   project_name: 'variational_flow_matching_policy exp3'
   epoch: 1000
-  load_dir: null
+  load_dir: experiment_training/imitation_learning/variational_flow_matching_policy/exp1/epoch_60
   save_every: 3
   save_dir: "experiment_training/imitation_learning/variational_flow_matching_policy/exp1"
   trainer: 

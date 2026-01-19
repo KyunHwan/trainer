@@ -17,6 +17,28 @@ import torch.distributed as distributed
 import math
 
 
+def router_z_loss(logits: torch.Tensor) -> torch.Tensor:
+    # ST-MoE style: mean(logsumexp(logits)^2)
+    return torch.mean(torch.logsumexp(logits, dim=-1) ** 2)
+
+
+def switch_load_balancing_loss(
+    router_probs: torch.Tensor,  # [B, E]
+    routing_map: torch.Tensor,   # [B, E] 0/1
+    top_k: int
+) -> torch.Tensor:
+    """
+    Switch-style auxiliary loss:
+      LB = E * sum_i f_i * P_i
+    where:
+      f_i = fraction of tokens routed to expert i (counts over B*top_k routes)
+      P_i = average router probability mass to expert i
+    """
+    B, E = router_probs.shape
+    f = routing_map.sum(0) / (B * top_k)
+    P = router_probs.mean(0)
+    return E * torch.sum(f * P)
+
 @TRAINER_REGISTRY.register("variational_flow_matching_policy_trainer")
 class Variational_Flow_Matching_Policy_Trainer(nn.Module):
     def __init__(self,
@@ -66,7 +88,6 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
                                                              cond_semantic=head_image_semantic,
                                                              action = data['action']
                                                              )
-        reparam_posterior_cls_token = posterior_cls_token + torch.randn_like(posterior_cls_token)
 
         """ VQVAE Prior """
         prior_cls_token = self.models['vqvae_prior'](cond_proprio=data['observation.state'],
@@ -87,8 +108,9 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
 
         """ Gating """
         #gating = self.models['gate'](posterior_cls_token)
-        gating = self.models['gate'](reparam_posterior_cls_token)
+        gating = self.models['gate'](posterior_cls_token + torch.randn_like(posterior_cls_token), iterations=iterations, training=True, use_noise=True)
         B, E = gating.shape
+
         # expert_ids = gating.argmax(dim=1)          # (B,) each element in [0, E-1]
 
         """ Flow Matching """
@@ -98,6 +120,7 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
 
         x_t = sample.x_t
         dx_t = sample.dx_t
+
 
         concat_moe_actions = self.models['moe_action_decoder'](
                                                 time=torch.cat([time, torch.zeros_like(time)], dim=0), 
@@ -167,6 +190,7 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         #loss["EMA_prior_posterior"] = torch.pow(prior_cls_token - posterior_target.detach(), 2).mean()
         #loss["Gating_Uniform"] = kl.detach().clone().item()
         
+
         loss["Total"] = moe_loss + 0.2 * sinkhorn_loss + kl
         loss["prior_posterior"] = kl.detach().clone().item()
         loss["velocity"] = moe_loss.detach().clone().item()

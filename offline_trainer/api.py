@@ -155,7 +155,6 @@ def _build_models(world_size, global_rank, local_rank, enable_dist_train, config
     models = {"main": model} if not isinstance(model, dict) else model
     model_total_params = 0.0
     for k, policy in models.items():
-        model_loaded = False
         frozen = False
         if local_rank == 0: 
             n_params_m = sum(p.numel() for p in policy.parameters()) / 1000000.0
@@ -165,8 +164,7 @@ def _build_models(world_size, global_rank, local_rank, enable_dist_train, config
         # Load model checkpoints / initialization
         # Need to check that saved models weren't wrapped using DDP (ie. that they aren't wrapped using modules)
         if config.train.load_dir is not None:
-            model_loaded = True
-            policy.load_state_dict(torch.load(os.path.join(config.train.load_dir, f"{k}.pt"), map_location=device))
+            policy.load_state_dict(torch.load(os.path.join(config.train.load_dir, f"{k}.pt"), map_location='cpu'))
         else:
             if config.model.component_build_args[k]['init']: 
                 policy.apply(init_weights)
@@ -183,8 +181,7 @@ def _build_models(world_size, global_rank, local_rank, enable_dist_train, config
             policy = nn.SyncBatchNorm.convert_sync_batchnorm(policy)
 
         # If the model wasn't loaded onto device, load it onto device
-        if not model_loaded:
-            policy = policy.to(device)
+        policy = policy.to(device)
         
         # 'find_unused_parameters' is used when there are conditional cases that leave some parts of the model unexplored. 
         # For example, when mixture of experts is used.
@@ -218,7 +215,7 @@ def _build_optimizers(config, models: nn.ModuleDict[str, nn.Module], device) -> 
                                         _params_dict(OptimizerParams.model_validate(config.model.component_optims[model_name]['params']).model_dump()))
         optimizers[model_name] = optimizer_factory.build(models[model_name].parameters())
         if config.train.load_dir is not None:
-            optimizers[model_name].load_state_dict(torch.load(os.path.join(config.train.load_dir, f"{model_name}_optimizer.pt"), map_location=device))
+            optimizers[model_name].load_state_dict(torch.load(os.path.join(config.train.load_dir, f"{model_name}_opt.pt"), map_location=device))
     
     return optimizers
 
@@ -331,7 +328,7 @@ def _save_checkpoints(models: nn.ModuleDict,
     # 3. Iterate through keys (assuming keys match as per instructions)
     for key in models.keys():
         # --- Save Model ---
-        model_filename = f"{key}_{epoch}.pt"
+        model_filename = f"{key}.pt"
         model_path = os.path.join(epoch_folder, model_filename)
 
         # Check if wrapped
@@ -343,7 +340,7 @@ def _save_checkpoints(models: nn.ModuleDict,
         # --- Save Optimizer ---
         # We assume the key exists in optimizers as stated in the prompt
         if key in optimizers:
-            opt_filename = f"{key}_opt_{epoch}.pt"
+            opt_filename = f"{key}_opt.pt"
             opt_path = os.path.join(epoch_folder, opt_filename)
             
             torch.save(optimizers[key].state_dict(), opt_path)
@@ -353,8 +350,9 @@ def _save_checkpoints(models: nn.ModuleDict,
 
 """ Training Info Logging """
 
-def _record(loss_dict: dict[str, Any], iterations: int): 
+def _record(loss_dict: dict[str, Any], iterations: int, num_iter_per_epoch: float): 
     detached_loss = {}
+
     for key in loss_dict.keys():
         if isinstance(loss_dict[key], torch.Tensor):
             if loss_dict[key].device.type == 'cpu':
@@ -363,7 +361,7 @@ def _record(loss_dict: dict[str, Any], iterations: int):
                 detached_loss[key] = loss_dict[key].detach().item()
         else: 
             detached_loss[key] = loss_dict[key]
-    
+    detached_loss['epoch'] = iterations/num_iter_per_epoch
     wandb.log(detached_loss, step=iterations)
 
 
@@ -424,24 +422,26 @@ def train(config_path: str) -> None:
     set_global_seed(seed=base_seed + rank)
     _dist_barrier(enable_dist_train, local_rank)
     dataloader, sampler, stats = _build_dataloader(config=config, world_rank=rank, local_rank=local_rank, world_size=world_size, enable_dist_train=enable_dist_train)
-    
+    num_iter_per_epoch = float(len(dataloader))
     try:
         stats_cpu = tree_map(map_list_to_torch, stats)
 
         iterations = 0
+        
         for epoch in range(config.train.epoch):
             if enable_dist_train:
                 sampler.set_epoch(epoch)
-
+        
             for _, data in enumerate(tqdm(dataloader, disable=(rank != 0))):
-                data['action'] = (data['action'] - stats_cpu['action']['mean']) / (stats_cpu['action']['std'] + 1e-8)
-                data['observation.state'] = (data['observation.state'] - stats_cpu['observation.state']['mean']) / (stats_cpu['observation.state']['std'] + 1e-8)
-                data['observation.current'] = (data['observation.current'] - stats_cpu['observation.current']['mean']) / (stats_cpu['observation.current']['std'] + 1e-8)
-                data['observation.state'] = torch.concat([data['observation.state'], data['observation.current']], dim=-1)
-                data = cast_dtype(data, torch.float32)
-                loss_dict = trainer.train_step(data=move_to_device(data, device), epoch=epoch, total_epochs=config.train.epoch, iterations=iterations)
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    data['action'] = (data['action'] - stats_cpu['action']['mean']) / (stats_cpu['action']['std'] + 1e-8)
+                    data['observation.state'] = (data['observation.state'] - stats_cpu['observation.state']['mean']) / (stats_cpu['observation.state']['std'] + 1e-8)
+                    data['observation.current'] = (data['observation.current'] - stats_cpu['observation.current']['mean']) / (stats_cpu['observation.current']['std'] + 1e-8)
+                    data['observation.state'] = torch.concat([data['observation.state'], data['observation.current']], dim=-1)
+                    data = cast_dtype(data, torch.float32)
+                    loss_dict = trainer.train_step(data=move_to_device(data, device), epoch=epoch, total_epochs=config.train.epoch, iterations=iterations)
                 if rank == 0:
-                    _record(loss_dict, iterations)
+                    _record(loss_dict, iterations, num_iter_per_epoch)
                 iterations += 1 # has to be updated for all GPUs
             _dist_barrier(enable_dist_train, local_rank)
 
