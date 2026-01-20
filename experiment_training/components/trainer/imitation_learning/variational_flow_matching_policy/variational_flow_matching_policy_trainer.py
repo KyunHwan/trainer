@@ -80,7 +80,7 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
 
             """ Depth """
             # outputs (batch, num_features, height, width, feature_dim) shaped latent features
-            depth_head = self.models['da3'](image=data['observation.images.cam_head'], export_feat_layers=[8, 13, 18, 23])
+            depth_head = self.models['da3'](image=data['observation.images.cam_head'], export_feat_layers=[18, 23])
 
         """ VQVAE Posterior """
         posterior_cls_token = self.models['vqvae_posterior'](cond_proprio=data['observation.state'],

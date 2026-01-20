@@ -41,17 +41,17 @@ model:
       type: "adamw_warmup_cosine_decay"
       params:
         lr: 1.0e-4 # AdamW
-        betas: [0.9, 0.999]
-        eps: 1.0e-9
-        weight_decay: 0.01
-        max_lr: 1.0e-3 # OneCycleLR
-        total_steps: 1000000
+        betas: [0.9, 0.95]
+        eps: 1.0e-8
+        weight_decay: 0.05
+        max_lr: 2.0e-4 # OneCycleLR
+        total_steps: 300000
         epochs: null
         steps_per_epoch: null
-        pct_start: 0.01
+        pct_start: 0.05
         warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
+        div_factor: 10.0
+        final_div_factor: 100.0
         alpha: null
         exponent: 1.0
         last_epoch: -1
@@ -59,17 +59,17 @@ model:
       type: "adamw_warmup_cosine_decay"
       params:
         lr: 1.0e-4 # AdamW
-        betas: [0.9, 0.999]
-        eps: 1.0e-9
-        weight_decay: 0.01
-        max_lr: 1.0e-3 # OneCycleLR
-        total_steps: 1000000
+        betas: [0.9, 0.95]
+        eps: 1.0e-8
+        weight_decay: 0.05
+        max_lr: 2.0e-4 # OneCycleLR
+        total_steps: 300000
         epochs: null
         steps_per_epoch: null
-        pct_start: 0.01
+        pct_start: 0.05
         warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
+        div_factor: 10.0
+        final_div_factor: 100.0
         alpha: null
         exponent: 1.0
         last_epoch: -1
@@ -77,17 +77,17 @@ model:
       type: "adamw_warmup_cosine_decay"
       params:
         lr: 1.0e-4 # AdamW
-        betas: [0.9, 0.999]
-        eps: 1.0e-9
-        weight_decay: 0.01
-        max_lr: 1.0e-3 # OneCycleLR
-        total_steps: 1000000
+        betas: [0.9, 0.95]
+        eps: 1.0e-8
+        weight_decay: 0.05
+        max_lr: 2.0e-4 # OneCycleLR
+        total_steps: 300000
         epochs: null
         steps_per_epoch: null
-        pct_start: 0.01
+        pct_start: 0.05
         warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
+        div_factor: 10.0
+        final_div_factor: 100.0
         alpha: null
         exponent: 1.0
         last_epoch: -1
@@ -95,17 +95,17 @@ model:
       type: "adamw_warmup_cosine_decay"
       params:
         lr: 1.0e-4 # AdamW
-        betas: [0.9, 0.999]
-        eps: 1.0e-9
-        weight_decay: 0.01
-        max_lr: 1.0e-3 # OneCycleLR
-        total_steps: 1000000
+        betas: [0.9, 0.95]
+        eps: 1.0e-8
+        weight_decay: 0.05
+        max_lr: 2.0e-4 # OneCycleLR
+        total_steps: 300000
         epochs: null
         steps_per_epoch: null
-        pct_start: 0.01
+        pct_start: 0.05
         warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
+        div_factor: 10.0
+        final_div_factor: 100.0
         alpha: null
         exponent: 1.0
         last_epoch: -1
@@ -113,17 +113,17 @@ model:
       type: "adamw_warmup_cosine_decay"
       params:
         lr: 1.0e-4 # AdamW
-        betas: [0.9, 0.999]
-        eps: 1.0e-9
-        weight_decay: 0.01
-        max_lr: 1.0e-3 # OneCycleLR
-        total_steps: 1000000
+        betas: [0.9, 0.95]
+        eps: 1.0e-8
+        weight_decay: 0.05
+        max_lr: 2.0e-4 # OneCycleLR
+        total_steps: 300000
         epochs: null
         steps_per_epoch: null
-        pct_start: 0.01
+        pct_start: 0.05
         warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
+        div_factor: 10.0
+        final_div_factor: 100.0
         alpha: null
         exponent: 1.0
         last_epoch: -1

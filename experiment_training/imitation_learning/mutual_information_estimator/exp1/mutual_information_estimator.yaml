@@ -1,6 +1,6 @@
 plugins:
   - "experiment_training.components.dataloader.lerobot_data"
-  - "experiment_training.components.optimizer.adamw_cosine_decay"
+  - "experiment_training.components.optimizer.schedule_free_radam"
   - "experiment_training.components.trainer.imitation_learning.mutual_information_estimator.mutual_information_estimator_trainer"
 model:
   find_unused_parameters: true
@@ -24,77 +24,29 @@ model:
       freeze: false
   component_optims:
     action_decoder:
-      type: "adamw_warmup_cosine_decay"
+      type: "schedule_free_radam"
       params:
-        lr: 1.0e-4 # AdamW
+        lr: 1e-4
         betas: [0.9, 0.999]
-        eps: 1.0e-8
-        weight_decay: 0.01
-        max_lr: 5.0e-4 # OneCycleLR
-        total_steps: 7660
-        epochs: null
-        steps_per_epoch: null
-        pct_start: 0.01
-        warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
-        alpha: null
-        exponent: 1.0
-        last_epoch: -1
+        silent_sgd_phase: true
     action_encoder:
-      type: "adamw_warmup_cosine_decay"
+      type: "schedule_free_radam"
       params:
-        lr: 1.0e-4 # AdamW
+        lr: 1e-4
         betas: [0.9, 0.999]
-        eps: 1.0e-8
-        weight_decay: 0.01
-        max_lr: 5.0e-4 # OneCycleLR
-        total_steps: 7660
-        epochs: null
-        steps_per_epoch: null
-        pct_start: 0.01
-        warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
-        alpha: null
-        exponent: 1.0
-        last_epoch: -1
+        silent_sgd_phase: true
     state_encoder:
-      type: "adamw_warmup_cosine_decay"
+      type: "schedule_free_radam"
       params:
-        lr: 1.0e-4 # AdamW
+        lr: 1e-4
         betas: [0.9, 0.999]
-        eps: 1.0e-8
-        weight_decay: 0.01
-        max_lr: 5.0e-4 # OneCycleLR
-        total_steps: 7660
-        epochs: null
-        steps_per_epoch: null
-        pct_start: 0.01
-        warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
-        alpha: null
-        exponent: 1.0
-        last_epoch: -1
+        silent_sgd_phase: true
     state_decoder:
-      type: "adamw_warmup_cosine_decay"
+      type: "schedule_free_radam"
       params:
-        lr: 1.0e-4 # AdamW
+        lr: 1e-4
         betas: [0.9, 0.999]
-        eps: 1.0e-8
-        weight_decay: 0.01
-        max_lr: 5.0e-4 # OneCycleLR
-        total_steps: 7660
-        epochs: null
-        steps_per_epoch: null
-        pct_start: 0.01
-        warmup_strategy: 'linear'
-        div_factor: 25.0
-        final_div_factor: 10000.0
-        alpha: null
-        exponent: 1.0
-        last_epoch: -1
+        silent_sgd_phase: true
 
 data:
   datamodule:
