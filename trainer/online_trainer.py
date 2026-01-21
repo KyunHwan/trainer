@@ -285,7 +285,7 @@ def _build_dataloader(config, world_rank=0, local_rank=0, world_size=0, enable_d
                             persistent_workers=config.data.persistent_workers,
                             prefetch_factor=config.data.prefetch_factor,
                             worker_init_fn=seed_worker,
-                            drop_last=False,
+                            drop_last=True,
                             shuffle=False))
     return dataloader, stats
 
