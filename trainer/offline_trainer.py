@@ -5,30 +5,30 @@ import os
 import gc
 from pathlib import Path
 
-from offline_trainer.config.loader import load_config
-from offline_trainer.config.schemas import ExperimentConfig, validate_config
-from offline_trainer.config.schemas import OptimizerParams
-from offline_trainer.modeling.factories import PolicyConstructorModelFactory
-from offline_trainer.registry import (
+from trainer.config.loader import load_config
+from trainer.config.schemas import ExperimentConfig, validate_config
+from trainer.config.schemas import OptimizerParams
+from trainer.modeling.factories import PolicyConstructorModelFactory
+from trainer.registry import (
     TRAINER_REGISTRY,
     DATASET_BUILDER_REGISTRY,
     OPTIMIZER_BUILDER_REGISTRY,
     LOSS_BUILDER_REGISTRY,
 )
 
-from offline_trainer.templates import (
+from trainer.templates import (
     DatasetFactory,
     LossFactory,
     OptimizerFactory,
     Trainer
 )
-from offline_trainer.registry.plugins import load_plugins
-from offline_trainer.utils.import_utils import instantiate
-from offline_trainer.utils.seed import *
+from trainer.registry.plugins import load_plugins
+from trainer.utils.import_utils import instantiate
+from trainer.utils.seed import *
 import argparse
 
-from offline_trainer.utils.device import move_to_device, cast_dtype
-from offline_trainer.utils.tree import tree_map
+from trainer.utils.device import move_to_device, cast_dtype
+from trainer.utils.tree import tree_map
 
 import torch
 import torch.nn as nn
@@ -468,39 +468,13 @@ def train(config_path: str) -> None:
             wandb.finish()
         _dist_cleanup(enable_dist_train)
 
-    
 
 
 
 
 
-def ddp_broadcast_test():
-    dist.init_process_group("nccl", init_method="env://")
-    local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
 
-    # Make a small module and wrap in DDP to trigger broadcast_coalesced
-    m = torch.nn.Linear(16, 16, bias=False).to(local_rank)
-    ddp = DDP(m, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
 
-    # Force one barrier that is device-aware
-    dist.barrier(device_ids=[local_rank])
-
-    if dist.get_rank() == 0:
-        print("DDP broadcast init OK")
-    dist.destroy_process_group()
-
-def test():
-    dist.init_process_group("nccl", init_method="env://")
-    local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
-
-    x = torch.ones(1, device=f"cuda:{local_rank}")
-    dist.all_reduce(x)
-    if dist.get_rank() == 0:
-        print("all_reduce ok:", x.item())
-
-    dist.destroy_process_group()
 
 if __name__ == "__main__":
     try:

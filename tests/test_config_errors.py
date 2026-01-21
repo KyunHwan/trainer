@@ -1,7 +1,7 @@
 import pytest
 
-from offline_trainer.config.errors import ConfigError
-from offline_trainer.config.schemas import validate_config
+from trainer.config.errors import ConfigError
+from trainer.config.schemas import validate_config
 
 
 def test_config_errors_include_yaml_path() -> None:

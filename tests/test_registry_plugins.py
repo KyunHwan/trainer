@@ -1,5 +1,5 @@
-from offline_trainer.registry import DATAMODULE_REGISTRY, TRAINER_REGISTRY, register_builtins
-from offline_trainer.registry.plugins import load_plugins
+from trainer.registry import DATAMODULE_REGISTRY, TRAINER_REGISTRY, register_builtins
+from trainer.registry.plugins import load_plugins
 
 
 def test_plugin_import_registers_keys() -> None:

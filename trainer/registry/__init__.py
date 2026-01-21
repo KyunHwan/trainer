@@ -1,12 +1,12 @@
-"""Global registries for offline_trainer components."""
+"""Global registries for trainer components."""
 from __future__ import annotations
 
-from offline_trainer.templates.loss import LossFactory
-from offline_trainer.templates.optim import OptimizerFactory
-from offline_trainer.templates.dataset import DatasetFactory
-from offline_trainer.templates.trainer import Trainer
+from trainer.templates.loss import LossFactory
+from trainer.templates.optim import OptimizerFactory
+from trainer.templates.dataset import DatasetFactory
+from trainer.templates.trainer import Trainer
 
-from offline_trainer.registry.core import Registry
+from trainer.registry.core import Registry
 
 from typing import Any
 

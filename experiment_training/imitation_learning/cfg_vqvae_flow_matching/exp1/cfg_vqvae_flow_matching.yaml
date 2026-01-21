@@ -91,7 +91,7 @@ train:
   epoch: 1000
   load_dir: null
   save_every: 3
-  save_dir: "~/offline_trainer/experiment_training/imitation_learning/cfg_vqvae_flow_matching/exp1"
+  save_dir: "~/trainer/experiment_training/imitation_learning/cfg_vqvae_flow_matching/exp1"
   trainer: 
     type: 'cfg_vqvae_flow_matching_trainer_kot'
   loss:

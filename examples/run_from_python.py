@@ -1,7 +1,7 @@
 """Example: run training from Python without a CLI framework."""
 from __future__ import annotations
 
-from offline_trainer.api import train
+from trainer.api import train
 
 
 if __name__ == "__main__":

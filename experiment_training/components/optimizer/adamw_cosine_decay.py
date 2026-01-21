@@ -4,7 +4,7 @@ import torch.nn as nn
 from typing import Optional
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import _LRScheduler
-from offline_trainer.registry import OPTIMIZER_BUILDER_REGISTRY
+from trainer.registry import OPTIMIZER_BUILDER_REGISTRY
 
 
 class WarmupCosineDecayLR(_LRScheduler):

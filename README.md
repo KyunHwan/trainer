@@ -6,11 +6,11 @@ Offline Trainer is a lightweight, config-driven training loop that composes mode
 - Run a minimal smoke test:
   python examples/run_from_python.py
 - Or call the API from your own script:
-  from offline_trainer.api import train
+  from trainer.api import train
   train("examples/configs/minimal.yaml")
 
 ## Configuration overview
-The entrypoint is `offline_trainer.api.train`, which loads and validates a YAML config.
+The entrypoint is `trainer.api.train`, which loads and validates a YAML config.
 
 Minimal shape:
 ```yaml
@@ -67,8 +67,8 @@ from typing import Any
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from offline_trainer.data.utils import worker_init_fn
-from offline_trainer.registry import (
+from trainer.data.utils import worker_init_fn
+from trainer.registry import (
     CALLBACK_REGISTRY,
     DATAMODULE_REGISTRY,
     LOGGER_REGISTRY,
@@ -78,9 +78,9 @@ from offline_trainer.registry import (
     SCHEDULER_REGISTRY,
     TRAINER_REGISTRY,
 )
-from offline_trainer.training.state import TrainState
-from offline_trainer.training.trainer import DefaultTrainer
-from offline_trainer.utils.selection import select
+from trainer.training.state import TrainState
+from trainer.training.trainer import DefaultTrainer
+from trainer.utils.selection import select
 
 
 class _ToyDataset(Dataset):
@@ -286,7 +286,7 @@ train:
 3) Run it:
 
 ```
-python -c "from offline_trainer.api import train; train('path/to/your.yaml')"
+python -c "from trainer.api import train; train('path/to/your.yaml')"
 ```
 
 Notes:
@@ -294,8 +294,8 @@ Notes:
 - For models, supply a policy_constructor config via `model.config_path` or inline `model.config`.
 
 ## Project layout
-- `offline_trainer/`: core library and training loop.
+- `trainer/`: core library and training loop.
 - `examples/`: sample configs and plugin modules.
 - `templates/`: copy-paste component templates.
 - `tests/`: pytest suite.
-- `policy_constructor/`: model construction library used by `offline_trainer`.
+- `policy_constructor/`: model construction library used by `trainer`.

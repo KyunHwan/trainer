@@ -3,7 +3,7 @@
 This directory contains runnable examples that exercise the core training flow and the plugin system.
 
 Contents:
-- `configs/`: YAML configs used by `offline_trainer.api.train`.
+- `configs/`: YAML configs used by `trainer.api.train`.
 - `extensions/`: importable modules that register custom components.
 - `run_from_python.py`: minimal entrypoint without a CLI wrapper.
 

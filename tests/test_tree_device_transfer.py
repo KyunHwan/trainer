@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import torch
 
-from offline_trainer.utils.device import move_to_device
+from trainer.utils.device import move_to_device
 
 
 @dataclass

@@ -1,8 +1,8 @@
 """Example custom trainer registered via plugin import."""
 from __future__ import annotations
 
-from offline_trainer.registry import TRAINER_REGISTRY
-from offline_trainer.training.trainer import DefaultTrainer
+from trainer.registry import TRAINER_REGISTRY
+from trainer.training.trainer import DefaultTrainer
 
 
 @TRAINER_REGISTRY.register("custom_trainer_v1")

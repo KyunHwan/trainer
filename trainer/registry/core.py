@@ -1,4 +1,4 @@
-"""Independent registry implementation for offline_trainer components."""
+"""Independent registry implementation for trainer components."""
 from __future__ import annotations
 
 from typing import Callable, Generic, TypeVar

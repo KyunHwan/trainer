@@ -3,7 +3,7 @@ import os
 import torch
 import yaml
 
-from offline_trainer.api import train
+from trainer.api import train
 
 
 def _write_config(tmp_path, config: dict) -> str:

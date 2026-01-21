@@ -1,6 +1,6 @@
 # Example Configs
 
-These YAML files are consumed by `offline_trainer.api.train` and demonstrate common configuration patterns.
+These YAML files are consumed by `trainer.api.train` and demonstrate common configuration patterns.
 
 Configs:
 - `minimal.yaml`: minimal smoke run with default components and a policy_constructor model config.

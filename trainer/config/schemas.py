@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError, field_validator, model_validator
 
-from offline_trainer.config.errors import ConfigError, ConfigValidationIssue
+from trainer.config.errors import ConfigError, ConfigValidationIssue
 
 
 class ComponentSpec(BaseModel):

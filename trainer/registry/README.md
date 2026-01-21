@@ -7,7 +7,7 @@ Modules:
 - `builtins.py`: registers built-in trainers, data, and components.
 - `plugins.py`: loads user modules listed in `plugins`.
 
-Common registries (see `offline_trainer/registry/__init__.py`):
+Common registries (see `trainer/registry/__init__.py`):
 - `TRAINER_REGISTRY`
 - `DATAMODULE_REGISTRY`
 - `OPTIMIZER_REGISTRY`

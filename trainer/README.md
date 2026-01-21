@@ -1,6 +1,6 @@
-# offline_trainer
+# trainer
 
-Core package for config-driven training. The public entrypoint is `offline_trainer.api.train`.
+Core package for config-driven training. The public entrypoint is `trainer.api.train`.
 
 Key areas:
 - `api.py`: loads config, registers components, instantiates modules, and launches training.

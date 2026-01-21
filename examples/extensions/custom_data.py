@@ -6,8 +6,8 @@ from dataclasses import dataclass
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from offline_trainer.data.utils import worker_init_fn
-from offline_trainer.registry import DATAMODULE_REGISTRY
+from trainer.data.utils import worker_init_fn
+from trainer.registry import DATAMODULE_REGISTRY
 
 
 class _TinyDataset(Dataset):

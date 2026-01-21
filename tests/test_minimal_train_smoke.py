@@ -2,7 +2,7 @@ import os
 
 import yaml
 
-from offline_trainer.api import train
+from trainer.api import train
 
 
 def test_minimal_train_smoke(tmp_path) -> None:
