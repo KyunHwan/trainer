@@ -3,28 +3,28 @@ schema_version: 1
 params:
   cond_proprio_dim: 48
   cond_visual_dim: 1024
-  action_dim: 24
   use_cond_semantic: true
   use_cond_semantic_projection: true
   cond_semantic_dim: 3072
-  num_cameras: 1
-  use_cls_token: true
+  use_cls_token: false
   num_cls_token: 1
+  use_action: false
+  action_dim: null
 
   transformer_d_model: 768
   transformer_nhead: 16
   transformer_dim_feedforward: 4096
-  transformer_dropout: 0.05
+  transformer_dropout: 0.2
   transformer_activation: gelu
   transformer_batch_first: true
-  transformer_num_layers: 5
+  transformer_num_layers: 8
 
 model:
   graph:
     inputs: [cond_proprio, cond_visual, cond_semantic, action]
     modules:
-      vfp_posterior:
-        _type_: vfp_posterior
+      info_embedder:
+        _type_: vfp_info_embedder
         cond_proprio_dim: ${params.cond_proprio_dim}
         cond_visual_dim: ${params.cond_visual_dim}
         transformer_d_model: ${params.transformer_d_model}
@@ -35,19 +35,19 @@ model:
         transformer_batch_first: ${params.transformer_batch_first}
         transformer_num_layers: ${params.transformer_num_layers}
         action_dim: ${params.action_dim}
+        use_action: ${params.use_action}
         use_cond_semantic: ${params.use_cond_semantic}
         use_cond_semantic_projection: ${params.use_cond_semantic_projection}
         cond_semantic_dim: ${params.cond_semantic_dim}
-        num_cameras: ${params.num_cameras}
         use_cls_token: ${params.use_cls_token}
         num_cls_token: ${params.num_cls_token}
     nodes:
-      - name: posterior_semantic
-        call: module:vfp_posterior
+      - name: info_embedder
+        call: module:info_embedder
         kwargs:
           cond_proprio: $cond_proprio
           cond_visual: $cond_visual
           cond_semantic: $cond_semantic
           action: $action
-    outputs: [$posterior_semantic]
+    outputs: [$info_embedder]
     return: single

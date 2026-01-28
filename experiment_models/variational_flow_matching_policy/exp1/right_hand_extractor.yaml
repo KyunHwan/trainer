@@ -1,0 +1,27 @@
+schema_version: 1
+
+params:
+  img_h: 240
+  img_w: 320
+  img_resize: false
+  self_extracted_dim: 512
+  output_dim: 1024
+
+model:
+  graph:
+    inputs: [img]
+    modules:
+      right_hand_extractor:
+        _type_: vfp_hand_extractor
+        img_h: ${params.img_h}
+        img_w: ${params.img_w}
+        img_resize: ${params.img_resize}
+        self_extracted_dim: ${params.self_extracted_dim}
+        output_dim: ${params.output_dim}
+    nodes:
+      - name: right_hand_extractor
+        call: module:right_hand_extractor
+        kwargs:
+          img: $img
+    outputs: [$right_hand_extractor]
+    return: single

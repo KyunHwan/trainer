@@ -1,24 +1,16 @@
 plugins:
   - "experiment_training.components.dataloader.lerobot_data"
-  - "experiment_training.components.optimizer.schedule_free_radam"
+  - "experiment_training.components.optimizer.adamw_cosine_decay"
   - "experiment_training.components.trainer.imitation_learning.naive_flow_matching_policy.naive_flow_matching_policy_trainer"
 model:
   find_unused_parameters: true
   component_config_paths:
     backbone: "experiment_models/naive_flow_matching_policy/exp1/backbone.yaml"
-    left_hand_extractor: "experiment_models/naive_flow_matching_policy/exp1/left_hand_extractor.yaml"
-    right_hand_extractor: "experiment_models/naive_flow_matching_policy/exp1/right_hand_extractor.yaml"
     da3: "experiment_models/naive_flow_matching_policy/exp1/da3.yaml"
     info_embedder: "experiment_models/naive_flow_matching_policy/exp1/info_embedder.yaml"
     action_decoder: "experiment_models/naive_flow_matching_policy/exp1/action_decoder.yaml"
   component_build_args:
     backbone:
-      init: false
-      freeze: false
-    left_hand_extractor:
-      init: false
-      freeze: false
-    right_hand_extractor:
       init: false
       freeze: false
     da3:
@@ -31,36 +23,60 @@ model:
       init: true
       freeze: false
   component_optims:
-    backbone: 
-      type: "schedule_free_radam"
+    backbone:
+      type: "adamw_warmup_cosine_decay"
       params:
-        lr: 1e-4
+        lr: 1.0e-4 # AdamW
         betas: [0.9, 0.995]
-        silent_sgd_phase: true
-    left_hand_extractor:
-      type: "schedule_free_radam"
-      params:
-        lr: 1e-4
-        betas: [0.9, 0.995]
-        silent_sgd_phase: true
-    right_hand_extractor:
-      type: "schedule_free_radam"
-      params:
-        lr: 1e-4
-        betas: [0.9, 0.995]
-        silent_sgd_phase: true
+        eps: 1.0e-10
+        weight_decay: 0.0001
+        max_lr: 1.0e-4 # OneCycleLR
+        total_steps: 130000
+        epochs: null
+        steps_per_epoch: null
+        pct_start: 0.05
+        warmup_strategy: 'linear'
+        div_factor: 1300
+        final_div_factor: 1000.0
+        alpha: null
+        exponent: 1.0
+        last_epoch: -1
     info_embedder:
-      type: "schedule_free_radam"
+      type: "adamw_warmup_cosine_decay"
       params:
-        lr: 1e-4
+        lr: 1.0e-4 # AdamW
         betas: [0.9, 0.995]
-        silent_sgd_phase: true
+        eps: 1.0e-10
+        weight_decay: 0.0001
+        max_lr: 1.0e-4 # OneCycleLR
+        total_steps: 130000
+        epochs: null
+        steps_per_epoch: null
+        pct_start: 0.05
+        warmup_strategy: 'linear'
+        div_factor: 1300
+        final_div_factor: 1000.0
+        alpha: null
+        exponent: 1.0
+        last_epoch: -1
     action_decoder:
-      type: "schedule_free_radam"
+      type: "adamw_warmup_cosine_decay"
       params:
-        lr: 1e-4
+        lr: 1.0e-4 # AdamW
         betas: [0.9, 0.995]
-        silent_sgd_phase: true
+        eps: 1.0e-10
+        weight_decay: 0.0001
+        max_lr: 1.0e-4 # OneCycleLR
+        total_steps: 130000
+        epochs: null
+        steps_per_epoch: null
+        pct_start: 0.05
+        warmup_strategy: 'linear'
+        div_factor: 1300
+        final_div_factor: 1000.0
+        alpha: null
+        exponent: 1.0
+        last_epoch: -1
 
 data:
   datamodule:
@@ -80,11 +96,11 @@ data:
   persistent_workers: true
   prefetch_factor: 1
 train:
-  project_name: 'naive_radam_1e-4_v3.3.2_unfreeze_backbone'
+  project_name: 'naive_adamw_cosin_decay_v3.3.2_unfreeze_backbone_pct_start_0.05'
   epoch: 1000
   load_dir: null
   save_every: 3
-  save_dir: "experiment_training/imitation_learning/naive_flow_matching_policy/exp1"
+  save_dir: "experiment_training/imitation_learning/naive_flow_matching_policy/exp2"
   trainer: 
     type: 'naive_flow_matching_policy_trainer'
   

@@ -10,10 +10,10 @@ params:
   use_cls_token: true
   num_cls_token: 1
 
-  transformer_d_model: 1024
+  transformer_d_model: 768
   transformer_nhead: 16
   transformer_dim_feedforward: 4096
-  transformer_dropout: 0.2
+  transformer_dropout: 0.05
   transformer_activation: gelu
   transformer_batch_first: true
   transformer_num_layers: 6

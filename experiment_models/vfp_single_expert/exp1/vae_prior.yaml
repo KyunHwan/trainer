@@ -8,12 +8,12 @@ params:
   cond_semantic_dim: 3072
   num_cameras: 1
   use_cls_token: true
-  num_cls_token: 1
+  num_cls_token: 5
 
-  transformer_d_model: 1024
+  transformer_d_model: 768
   transformer_nhead: 16
   transformer_dim_feedforward: 4096
-  transformer_dropout: 0.2
+  transformer_dropout: 0.05
   transformer_activation: gelu
   transformer_batch_first: true
   transformer_num_layers: 6
@@ -23,8 +23,8 @@ model:
   graph:
     inputs: [cond_proprio, cond_visual, cond_semantic, action]
     modules:
-      vfp_prior:
-        _type_: vfp_prior
+      vae_prior:
+        _type_: vfp_single_prior
         cond_proprio_dim: ${params.cond_proprio_dim}
         cond_visual_dim: ${params.cond_visual_dim}
         transformer_d_model: ${params.transformer_d_model}
@@ -42,7 +42,7 @@ model:
         num_cls_token: ${params.num_cls_token}
     nodes:
       - name: prior_semantic
-        call: module:vfp_prior
+        call: module:vae_prior
         kwargs:
           cond_proprio: $cond_proprio
           cond_visual: $cond_visual

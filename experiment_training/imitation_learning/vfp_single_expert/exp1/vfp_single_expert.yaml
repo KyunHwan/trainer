@@ -1,0 +1,162 @@
+plugins:
+  - "experiment_training.components.dataloader.lerobot_data"
+  - "experiment_training.components.loss.sinkhorn_knopp"
+  - "experiment_training.components.optimizer.adamw_cosine_decay"
+  - "experiment_training.components.trainer.imitation_learning.vfp_single_expert.vfp_single_expert_trainer"
+model:
+  find_unused_parameters: true
+  component_config_paths:
+    backbone: "experiment_models/vfp_single_expert/exp1/backbone.yaml"
+    da3: "experiment_models/vfp_single_expert/exp1/da3.yaml"
+    vae_posterior: "experiment_models/vfp_single_expert/exp1/vae_posterior.yaml"
+    vae_prior: "experiment_models/vfp_single_expert/exp1/vae_prior.yaml"
+    info_embedder: "experiment_models/vfp_single_expert/exp1/info_embedder.yaml"
+    action_decoder: "experiment_models/vfp_single_expert/exp1/action_decoder.yaml"
+    
+  component_build_args:
+    backbone:
+      init: false
+      freeze: false
+    da3:
+      init: false
+      freeze: true
+    vae_posterior:
+      init: true
+      freeze: false
+    vae_prior:
+      init: true
+      freeze: false
+    info_embedder:
+      init: true
+      freeze: false
+    action_decoder:
+      init: true
+      freeze: false
+  component_optims:
+    backbone:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        lr: 1.0e-4 # AdamW
+        betas: [0.9, 0.995]
+        eps: 1.0e-10
+        weight_decay: 0.0001
+        max_lr: 1.0e-4 # OneCycleLR
+        total_steps: 328800
+        epochs: null
+        steps_per_epoch: null
+        pct_start: 0.02
+        warmup_strategy: 'linear'
+        div_factor: 3288
+        final_div_factor: 1000.0
+        alpha: null
+        exponent: 1.0
+        last_epoch: -1
+    vae_posterior:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        lr: 1.0e-4 # AdamW
+        betas: [0.9, 0.995]
+        eps: 1.0e-10
+        weight_decay: 0.0001
+        max_lr: 1.0e-4 # OneCycleLR
+        total_steps: 328800
+        epochs: null
+        steps_per_epoch: null
+        pct_start: 0.02
+        warmup_strategy: 'linear'
+        div_factor: 3288
+        final_div_factor: 1000.0
+        alpha: null
+        exponent: 1.0
+        last_epoch: -1
+    vae_prior:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        lr: 1.0e-4 # AdamW
+        betas: [0.9, 0.995]
+        eps: 1.0e-10
+        weight_decay: 0.0001
+        max_lr: 1.0e-4 # OneCycleLR
+        total_steps: 328800
+        epochs: null
+        steps_per_epoch: null
+        pct_start: 0.02
+        warmup_strategy: 'linear'
+        div_factor: 3288
+        final_div_factor: 1000.0
+        alpha: null
+        exponent: 1.0
+        last_epoch: -1
+    info_embedder:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        lr: 1.0e-4 # AdamW
+        betas: [0.9, 0.995]
+        eps: 1.0e-10
+        weight_decay: 0.0001
+        max_lr: 1.0e-4 # OneCycleLR
+        total_steps: 328800
+        epochs: null
+        steps_per_epoch: null
+        pct_start: 0.04
+        warmup_strategy: 'linear'
+        div_factor: 3288
+        final_div_factor: 1000.0
+        alpha: null
+        exponent: 1.0
+        last_epoch: -1
+    action_decoder:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        lr: 1.0e-4 # AdamW
+        betas: [0.9, 0.995]
+        eps: 1.0e-10
+        weight_decay: 0.0001
+        max_lr: 1.0e-4 # OneCycleLR
+        total_steps: 328800
+        epochs: null
+        steps_per_epoch: null
+        pct_start: 0.02
+        warmup_strategy: 'linear'
+        div_factor: 3288
+        final_div_factor: 1000.0
+        alpha: null
+        exponent: 1.0
+        last_epoch: -1
+
+
+data:
+  datamodule:
+    type: "lerobot_dataset_factory"
+    params:
+      task_name: 'picknplace'
+      local_files_only: false
+      root: '.'
+      repo_id: 'joon001001/igris-b-pnp_v3.3.2'
+      action_horizon: 40
+      obs_proprio_history: 40
+      obs_images_history: 1
+      HZ: 20
+  batch_size: 30
+  num_workers: 12
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 1
+train:
+  project_name: 'vfp_single_expert_adamw_cosine_1e-4_v3.3.2_unfreeze_backbone_1e-4'
+  epoch: 1000
+  load_dir: null
+  save_every: 3
+  save_dir: "experiment_training/imitation_learning/vfp_single_expert/exp1"
+  trainer: 
+    type: 'vfp_single_expert_trainer'
+  loss:
+    type: "sinkhorn_knopp"
+    params:
+      p: 1
+      lam_state: 0.2
+      blur: 0.004
+      debias: True       
+      backend: "auto"
+      scaling: 0.5
+      

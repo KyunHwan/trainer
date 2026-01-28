@@ -39,8 +39,8 @@ def switch_load_balancing_loss(
     P = router_probs.mean(0)
     return E * torch.sum(f * P)
 
-@TRAINER_REGISTRY.register("variational_flow_matching_policy_trainer")
-class Variational_Flow_Matching_Policy_Trainer(nn.Module):
+@TRAINER_REGISTRY.register("vfp_single_expert_trainer")
+class VFP_Single_Expert_Trainer(nn.Module):
     def __init__(self,
                  *,
                  models: nn.ModuleDict, 
@@ -56,13 +56,6 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         self.models=models
         self.optimizers=optimizers
         self.loss=loss
-        self.posterior_ema = copy.deepcopy(self.unwrap(self.models["vqvae_posterior"])).to(device).eval()
-        for p in self.posterior_ema.parameters():
-            p.requires_grad_(False)
-        self.posterior_ema_factor = 0.999
-
-        self.velocity_loss_ema = 0.0
-        self.velocity_loss_ema_factor = 0.995
 
     def forward(self, data: dict[str, Any], epoch, total_epochs, iterations) -> dict[str, torch.Tensor]:
         loss = {}
@@ -82,63 +75,55 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
                                                                             data['observation.images.cam_left'],
                                                                             data['observation.images.cam_right'],], dim=0))
         head_image_features, head_image_semantic = image_features[:batch_size], image_semantic[:batch_size]
-        head_image_features = einops.rearrange(head_image_features, 'b c h w -> b (h w) c')
-        left_image_features, left_image_semantic = image_features[batch_size:2 * batch_size], image_semantic[batch_size:2 * batch_size]
+        head_image_features = einops.rearrange(head_image_features, 'b c h w -> b 1 c h w')
+        left_image_features = image_features[batch_size:2 * batch_size]#, image_semantic[batch_size:2 * batch_size]
         left_image_features = einops.rearrange(left_image_features, 'b c h w -> b (h w) c')
-        right_image_features, right_image_semantic = image_features[2 * batch_size:], image_semantic[2 * batch_size:]
+        right_image_features = image_features[2 * batch_size:]#, image_semantic[2 * batch_size:]
         right_image_features = einops.rearrange(right_image_features, 'b c h w -> b (h w) c')
-
-        # head_image_features, head_image_semantic = self.models['backbone'](data['observation.images.cam_head'])
-        # head_image_features = einops.rearrange(head_image_features, 'b c h w -> b 1 c h w')
-        # left_image_features = self.models['left_hand_extractor'](data['observation.images.cam_left'])
-        # right_image_features = self.models['right_hand_extractor'](data['observation.images.cam_right'])
-        
 
         with torch.no_grad():
             """ Depth """
             # outputs (batch, num_features, height, width, feature_dim) shaped latent features
             depth_head = einops.rearrange(self.models['da3'](image=data['observation.images.cam_head'], export_feat_layers=[18, 23]),
                                           'b n h w d -> b (n h w) d')
+            # outputs (batch, num_features, height, width, feature_dim) shaped latent features
+            depth_left = einops.rearrange(self.models['da3'](image=data['observation.images.cam_left'], export_feat_layers=[18, 23]),
+                                          'b n h w d -> b (n h w) d')
+            # outputs (batch, num_features, height, width, feature_dim) shaped latent features
+            depth_right = einops.rearrange(self.models['da3'](image=data['observation.images.cam_right'], export_feat_layers=[18, 23]),
+                                          'b n h w d -> b (n h w) d')
 
         """ VQVAE Posterior """
-        posterior_cls_token = self.models['vqvae_posterior'](cond_proprio=data['observation.state'],
+        posterior_cls_token = self.models['vae_posterior'](cond_proprio=data['observation.state'],
                                                              cond_visual=head_image_features,
                                                              cond_semantic=head_image_semantic,
                                                              action = data['action']
                                                              )
-
+        
         """ VQVAE Prior """
-        prior_cls_token = self.models['vqvae_prior'](cond_proprio=data['observation.state'],
+        prior_cls_token = self.models['vae_prior'](cond_proprio=data['observation.state'],
                                                      cond_visual=head_image_features,
                                                      cond_semantic=head_image_semantic,
                                                      action = None
                                                      )
-        
-        kl = torch.flatten(torch.pow(prior_cls_token - posterior_cls_token, 2), start_dim=1).mean()
+        head_image_features = einops.rearrange(head_image_features, 'b n c h w -> b (n h w) c')
+        kl = torch.pow(prior_cls_token - posterior_cls_token, 2).mean()
 
         """ Proprio Projection """
-        # Assumes that proprio feature dimension will be matched to that of visual
-        # conditioning_info = self.models['proprio_projector'](cond_proprio=data['observation.state'],
-        #                                                     cond_visual=torch.cat([head_image_features,
-        #                                                                             left_image_features, 
-        #                                                                             right_image_features],
-        #                                                                             dim=1),)
         conditioning_info = self.models['info_embedder'](
             cond_proprio=data['observation.state'],
             cond_visual=torch.cat([
                 head_image_features,
                 depth_head,
                 left_image_features, # einops.rearrange(left_image_features, 'b n c h w -> b (n h w) c'),
+                depth_left,
                 right_image_features, #einops.rearrange(right_image_features, 'b n c h w -> b (n h w) c')
+                depth_right
             ],
             dim=1),
-            cond_semantic=head_image_semantic,
+            cond_semantic=posterior_cls_token,
             action=None
         )['encoder_output']
-
-        """ Gating """
-        gating = self.models['gate'](posterior_cls_token + torch.randn_like(posterior_cls_token), iterations=iterations, training=True, use_noise=True)
-        B, E = gating.shape
 
         """ Flow Matching """
         noise = torch.randn_like(data['action'], device=data['action'].device)
@@ -148,46 +133,24 @@ class Variational_Flow_Matching_Policy_Trainer(nn.Module):
         x_t = sample.x_t
         dx_t = sample.dx_t
 
-        concat_moe_actions = self.models['moe_action_decoder'](
+        B = data['action'].shape[0]
+
+        concat_actions = self.models['action_decoder'](
                                     time=torch.cat([time, torch.zeros_like(time)], dim=0), 
                                     noise=torch.cat([x_t, noise], dim=0), 
                                     memory_input=torch.cat([conditioning_info, conditioning_info], dim=0),
                                     discrete_semantic_input=None,
-                                ) # (b e s d)
-        concat_dx_t = einops.rearrange(torch.stack([dx_t for i in range(E)], dim=0), 'e b s d -> b e s d')
-        err = einops.rearrange((concat_dx_t - concat_moe_actions[:B]).pow(2), 'b e s d -> b e (s d)')#.sum(dim=-1)
-        moe_loss = (err * gating[:, :, None]).sum(dim=1).mean()
+                                ) # (2 * b s d)
+        velocity_loss = (dx_t - concat_actions[:B]).pow(2).mean()
 
-        averaged_moe_actions = torch.sum(concat_moe_actions[B:] * gating[:, :, None, None], dim=1)
-        sinkhorn_loss = self.loss(pred_action = noise + averaged_moe_actions, 
+        sinkhorn_loss = self.loss(pred_action = noise + concat_actions[B:], 
                                   target_action = data['action'], 
                                   state_pred = data['observation.state'], 
                                   state_target = data['observation.state'])
-
-        """ Activated Expert """
-        with torch.no_grad():
-            expert_ids = gating.detach().argmax(dim=1)  # (B_local,)
-
-            # local histogram (E,)
-            local_counts = torch.bincount(expert_ids, minlength=E).to(dtype=torch.long)
-
-            # aggregate across ranks
-            if distributed.is_available() and distributed.is_initialized():
-                distributed.all_reduce(local_counts, op=distributed.ReduceOp.SUM)
-            
-            winner_id = int(local_counts.argmax().item())  # tie-break: lowest id wins
-
-            total_samples = local_counts.sum()
-            probs = local_counts / total_samples  # Shape: (E,)
-            indices = torch.arange(len(local_counts), device=local_counts.device, dtype=local_counts.dtype)
-            expected_expert_id = (indices * probs).sum().item()
-
-        loss["Most Frequently Activated Expert"] = winner_id
-        loss["Expected Activated Expert"] = expected_expert_id
         
-        loss["total"] = moe_loss + 0.2 * sinkhorn_loss + kl
+        loss["total"] = velocity_loss + 0.2 * sinkhorn_loss + kl
         loss["prior_posterior"] = kl.detach().clone().item()
-        loss["velocity"] = moe_loss.detach().clone().item()
+        loss["velocity"] = velocity_loss.detach().clone().item()
         loss["Sinkhorn"] = sinkhorn_loss.detach().clone().item()
         
         return loss 

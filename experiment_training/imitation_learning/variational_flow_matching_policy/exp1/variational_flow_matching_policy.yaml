@@ -7,75 +7,92 @@ model:
   find_unused_parameters: true
   component_config_paths:
     backbone: "experiment_models/variational_flow_matching_policy/exp1/backbone.yaml"
+    left_hand_extractor: "experiment_models/variational_flow_matching_policy/exp1/left_hand_extractor.yaml"
+    right_hand_extractor: "experiment_models/variational_flow_matching_policy/exp1/right_hand_extractor.yaml"
     da3: "experiment_models/variational_flow_matching_policy/exp1/da3.yaml"
-    #vqvae_codebook: "experiment_models/variational_flow_matching_policy/exp1/vqvae_codebook.yaml"
     vqvae_posterior: "experiment_models/variational_flow_matching_policy/exp1/vqvae_posterior.yaml"
     vqvae_prior: "experiment_models/variational_flow_matching_policy/exp1/vqvae_prior.yaml"
+    info_embedder: "experiment_models/variational_flow_matching_policy/exp1/info_embedder.yaml"
     gate: "experiment_models/variational_flow_matching_policy/exp1/gate.yaml"
-    proprio_projector: "experiment_models/variational_flow_matching_policy/exp1/proprio_projector.yaml"
     moe_action_decoder: "experiment_models/variational_flow_matching_policy/exp1/moe_action_decoder.yaml"
     
   component_build_args:
     backbone:
       init: false
-      freeze: true
+      freeze: false
+    left_hand_extractor:
+      init: false
+      freeze: false
+    right_hand_extractor:
+      init: false
+      freeze: false
+
     da3:
       init: false
       freeze: true
-    # vqvae_codebook:
-    #   init: false
-    #   freeze: false
     vqvae_posterior:
       init: true
       freeze: false
     vqvae_prior:
       init: true
       freeze: false
-    gate:
+    info_embedder:
       init: true
       freeze: false
-    proprio_projector:
+    gate:
       init: true
       freeze: false
     moe_action_decoder:
       init: true
       freeze: false
   component_optims:
-    # vqvae_codebook:
-    #   type: "schedule_free_radam"
-    #   params:
-    #     lr: 1e-4
-    #     betas: [0.9, 0.999]
-    #     silent_sgd_phase: true
+    backbone:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.95]
+        silent_sgd_phase: true
+    left_hand_extractor:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.95]
+        silent_sgd_phase: true
+    right_hand_extractor:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.95]
+        silent_sgd_phase: true
     vqvae_posterior:
       type: "schedule_free_radam"
       params:
         lr: 1e-4
-        betas: [0.9, 0.999]
+        betas: [0.9, 0.95]
         silent_sgd_phase: true
     vqvae_prior:
       type: "schedule_free_radam"
       params:
         lr: 1e-4
-        betas: [0.9, 0.999]
+        betas: [0.9, 0.95]
+        silent_sgd_phase: true
+    info_embedder:
+      type: "schedule_free_radam"
+      params:
+        lr: 1e-4
+        betas: [0.9, 0.95]
         silent_sgd_phase: true
     gate:
       type: "schedule_free_radam"
       params:
         lr: 1e-4
-        betas: [0.9, 0.999]
-        silent_sgd_phase: true
-    proprio_projector:
-      type: "schedule_free_radam"
-      params:
-        lr: 1e-4
-        betas: [0.9, 0.999]
+        betas: [0.9, 0.95]
         silent_sgd_phase: true
     moe_action_decoder:
       type: "schedule_free_radam"
       params:
         lr: 1e-4
-        betas: [0.9, 0.999]
+        betas: [0.9, 0.95]
         silent_sgd_phase: true
 
 
@@ -86,18 +103,18 @@ data:
       task_name: 'picknplace'
       local_files_only: false
       root: '.'
-      repo_id: 'joon001001/igris-b-pnp_v3.1'
+      repo_id: 'joon001001/igris-b-pnp_v3.3.2'
       action_horizon: 40
       obs_proprio_history: 40
       obs_images_history: 1
       HZ: 20
-  batch_size: 16
+  batch_size: 32
   num_workers: 12
   pin_memory: true
   persistent_workers: true
   prefetch_factor: 1
 train:
-  project_name: 'variational_flow_matching_policy exp3'
+  project_name: 'vfp_radam_1e-4_v3.3.2_unfreeze_backbone'
   epoch: 1000
   load_dir: null
   save_every: 3

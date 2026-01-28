@@ -5,6 +5,9 @@ import os
 import gc
 from pathlib import Path
 
+import torch
+torch.autograd.set_detect_anomaly(True)
+
 from trainer.config.loader import load_config
 from trainer.config.schemas import ExperimentConfig, validate_config
 from trainer.config.schemas import OptimizerParams
@@ -114,7 +117,7 @@ def _dist_setup(enable_dist_train, device) -> None:
 
 def _dist_barrier(dist_enabled, local_rank) -> None:
     if dist_enabled:
-        dist.barrier(device_ids=[local_rank])
+        dist.barrier()#device_ids=[local_rank])
 
 def _dist_cleanup(enable_dist_train) -> None:
     if enable_dist_train:
@@ -421,7 +424,7 @@ def train(config_path: str) -> None:
         wandb.init(
             project=project_name,
             config=_params_dict(config), # Uses your helper to dump Pydantic config
-            name=f"{getattr(config.train, f'{project_name}', 'imitation_learning')}", # Optional: Readable run name
+            name=config.train.project_name,
             # reinit=True # Uncomment if you run multiple trainings in one script execution
         )
 
@@ -450,18 +453,19 @@ def train(config_path: str) -> None:
                 sampler.set_epoch(epoch)
         
             for _, data in enumerate(tqdm(dataloader, disable=(rank != 0))):
+                data['action'] = (data['action'] - stats_cpu['action']['mean']) / (stats_cpu['action']['std'] + 1e-8)
+                data['observation.state'] = (data['observation.state'] - stats_cpu['observation.state']['mean']) / (stats_cpu['observation.state']['std'] + 1e-8)
+                data['observation.current'] = (data['observation.current'] - stats_cpu['observation.current']['mean']) / (stats_cpu['observation.current']['std'] + 1e-8)
+                data['observation.proprio_state'] = data['observation.state']
+                data['observation.state'] = torch.concat([data['observation.state'], data['observation.current']], dim=-1)
+                data = cast_dtype(data, torch.float32)
+                data = move_to_device(data, device)
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    data['action'] = (data['action'] - stats_cpu['action']['mean']) / (stats_cpu['action']['std'] + 1e-8)
-                    data['observation.state'] = (data['observation.state'] - stats_cpu['observation.state']['mean']) / (stats_cpu['observation.state']['std'] + 1e-8)
-                    data['observation.current'] = (data['observation.current'] - stats_cpu['observation.current']['mean']) / (stats_cpu['observation.current']['std'] + 1e-8)
-                    data['observation.proprio_state'] = data['observation.state']
-                    data['observation.state'] = torch.concat([data['observation.state'], data['observation.current']], dim=-1)
-                    data = cast_dtype(data, torch.float32)
-                    loss_dict = trainer.train_step(data=move_to_device(data, device), epoch=epoch, total_epochs=config.train.epoch, iterations=iterations)
+                    loss_dict = trainer.train_step(data=data, epoch=epoch, total_epochs=config.train.epoch, iterations=iterations)
                 if rank == 0:
                     _record(loss_dict, iterations, num_iter_per_epoch)
                 iterations += 1 # has to be updated for all GPUs
-            _dist_barrier(enable_dist_train, local_rank)
+            # _dist_barrier(enable_dist_train, local_rank)
 
             if rank == 0:
                 print(f"Epoch {epoch} complete")
@@ -472,9 +476,9 @@ def train(config_path: str) -> None:
                                     save_dir=config.train.save_dir, 
                                     epoch=epoch + 1)
 
-            gc.collect() 
-            torch.cuda.empty_cache()
-            _dist_barrier(enable_dist_train, local_rank)
+            # gc.collect() 
+            # torch.cuda.empty_cache()
+            # _dist_barrier(enable_dist_train, local_rank)
             
         if rank == 0: 
             print("Training finished !!")

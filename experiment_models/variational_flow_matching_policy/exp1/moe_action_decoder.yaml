@@ -1,16 +1,16 @@
 schema_version: 1
 
 params:
-  num_experts: 5
+  num_experts: 4
   action_dim: 24
   action_chunk_size: 40
   use_cond_semantic: false
   cond_semantic_dim: null
 
-  transformer_d_model: 1024
+  transformer_d_model: 768
   transformer_nhead: 16
   transformer_dim_feedforward: 4096
-  transformer_dropout: 0.2
+  transformer_dropout: 0.0
   transformer_activation: gelu
   transformer_batch_first: true
   transformer_tgt_is_causal: true

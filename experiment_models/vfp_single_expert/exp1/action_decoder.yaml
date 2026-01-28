@@ -1,20 +1,19 @@
 schema_version: 1
 
 params:
-  num_experts: 5
   action_dim: 24
   action_chunk_size: 40
   use_cond_semantic: false
   cond_semantic_dim: null
 
-  transformer_d_model: 1024
+  transformer_d_model: 768
   transformer_nhead: 16
   transformer_dim_feedforward: 4096
-  transformer_dropout: 0.2
+  transformer_dropout: 0.0
   transformer_activation: gelu
   transformer_batch_first: true
   transformer_tgt_is_causal: true
-  transformer_num_layers: 8
+  transformer_num_layers: 10
 
   
 
@@ -22,9 +21,8 @@ model:
   graph:
     inputs: [time, noise, memory_input, discrete_semantic_input]
     modules:
-      vfp_moe:
-        _type_: vfp_moe
-        num_experts: ${params.num_experts}
+      action_decoder:
+        _type_: vfp_single_action_decoder
         action_dim: ${params.action_dim}
         transformer_d_model: ${params.transformer_d_model}
         transformer_nhead: ${params.transformer_nhead}
@@ -39,7 +37,7 @@ model:
         cond_semantic_dim: ${params.cond_semantic_dim}
     nodes:
       - name: decoded_action
-        call: module:vfp_moe
+        call: module:action_decoder
         kwargs:
           time: $time
           noise: $noise

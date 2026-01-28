@@ -2,7 +2,7 @@ schema_version: 1
 
 params:
   cond_proprio_dim: 48
-  transformer_d_model: 1024
+  transformer_d_model: 768
 
 
 model:

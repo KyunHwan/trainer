@@ -9,7 +9,7 @@ params:
   cond_semantic_dim: 3072
   num_cameras: 1
   use_cls_token: true
-  num_cls_token: 1
+  num_cls_token: 5
 
   transformer_d_model: 768
   transformer_nhead: 16
@@ -23,8 +23,8 @@ model:
   graph:
     inputs: [cond_proprio, cond_visual, cond_semantic, action]
     modules:
-      vfp_posterior:
-        _type_: vfp_posterior
+      vae_posterior:
+        _type_: vfp_single_posterior
         cond_proprio_dim: ${params.cond_proprio_dim}
         cond_visual_dim: ${params.cond_visual_dim}
         transformer_d_model: ${params.transformer_d_model}
@@ -43,7 +43,7 @@ model:
         num_cls_token: ${params.num_cls_token}
     nodes:
       - name: posterior_semantic
-        call: module:vfp_posterior
+        call: module:vae_posterior
         kwargs:
           cond_proprio: $cond_proprio
           cond_visual: $cond_visual
