@@ -77,8 +77,6 @@ def map_list_to_torch(lst: list):
     import torch
     return torch.tensor(lst)
 
-
-
 """ Distributed Training Helpers """
 
 def sync(tag: str, local_rank):
@@ -122,6 +120,7 @@ def _dist_barrier(dist_enabled, local_rank) -> None:
 def _dist_cleanup(enable_dist_train) -> None:
     if enable_dist_train:
         dist.destroy_process_group()
+
 
 
 
