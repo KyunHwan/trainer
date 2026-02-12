@@ -1,12 +1,12 @@
 """Global registries for trainer components."""
 from __future__ import annotations
 
-from trainer.templates.loss import LossFactory
-from trainer.templates.optim import OptimizerFactory
-from trainer.templates.dataset import DatasetFactory
-from trainer.templates.trainer import Trainer
+from ..templates.loss import LossFactory
+from ..templates.optim import OptimizerFactory
+from ..templates.dataset import DatasetFactory
+from ..templates.trainer import Trainer
 
-from trainer.registry.core import Registry
+from .core import Registry
 
 from typing import Any
 
