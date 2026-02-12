@@ -58,6 +58,7 @@ class VFP_Single_Expert_Trainer(nn.Module):
         self.models=models
         self.optimizers=optimizers
         self.loss=loss
+        self.l1loss = nn.L1Loss(reduction='none')
 
     def forward(self, data: dict[str, Any], epoch, total_epochs, iterations) -> dict[str, torch.Tensor]:
         loss = {}
@@ -160,7 +161,7 @@ class VFP_Single_Expert_Trainer(nn.Module):
             memory_input=conditioning_info,
             discrete_semantic_input=None
         )
-        velocity_loss = (dx_t - actions).pow(2).mean()
+        velocity_loss = self.l1loss(dx_t, actions).mean()
         loss["total"] = velocity_loss #+ 0.2 * sinkhorn_loss# + kl
         #loss["prior_posterior"] = kl.detach().clone().item()
         loss["velocity"] = velocity_loss.detach().clone().item()
