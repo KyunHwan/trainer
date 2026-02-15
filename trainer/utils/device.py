@@ -5,7 +5,7 @@ from typing import Any
 
 import torch
 
-from trainer.utils.tree import tree_map
+from trainer.trainer.utils.tree import tree_map
 
 
 def select_device(requested: str | None = None) -> torch.device:
