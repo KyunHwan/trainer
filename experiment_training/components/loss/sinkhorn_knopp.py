@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from geomloss import SamplesLoss
-from trainer.registry import LOSS_BUILDER_REGISTRY
+from trainer.trainer.registry import LOSS_BUILDER_REGISTRY
 
 @LOSS_BUILDER_REGISTRY.register("sinkhorn_knopp")
 class SinkhornKnoppFactory:

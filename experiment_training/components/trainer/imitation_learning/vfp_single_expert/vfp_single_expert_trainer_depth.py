@@ -7,7 +7,7 @@ from flow_matching.path.scheduler.scheduler import CondOTScheduler
 
 import torch.nn.functional as F
 
-from trainer.registry import TRAINER_REGISTRY
+from trainer.trainer.registry import TRAINER_REGISTRY
 from typing import Any
 import copy
 

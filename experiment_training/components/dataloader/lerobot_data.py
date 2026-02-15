@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from trainer.registry import DATASET_BUILDER_REGISTRY
+from trainer.trainer.registry import DATASET_BUILDER_REGISTRY
 from typing import Any
 from torchvision.transforms import v2
 

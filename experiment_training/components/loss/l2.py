@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from trainer.registry import LOSS_BUILDER_REGISTRY
+from trainer.trainer.registry import LOSS_BUILDER_REGISTRY
 
 @LOSS_BUILDER_REGISTRY.register("l2_loss")
 class L2LossFactory:

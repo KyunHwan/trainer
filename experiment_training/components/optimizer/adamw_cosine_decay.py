@@ -268,7 +268,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 
-from trainer.registry import OPTIMIZER_BUILDER_REGISTRY
+from trainer.trainer.registry import OPTIMIZER_BUILDER_REGISTRY
 
 
 # Prefer the public base class in modern PyTorch; fall back for older versions.

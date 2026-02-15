@@ -6,7 +6,7 @@ from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 
-from trainer.registry import OPTIMIZER_BUILDER_REGISTRY
+from trainer.trainer.registry import OPTIMIZER_BUILDER_REGISTRY
 
 class AdamWWithOneCycle(AdamW):
     """

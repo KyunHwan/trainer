@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from schedulefree.radam_schedulefree import RAdamScheduleFree as radam_free
-from trainer.registry import OPTIMIZER_BUILDER_REGISTRY
+from trainer.trainer.registry import OPTIMIZER_BUILDER_REGISTRY
 
 @OPTIMIZER_BUILDER_REGISTRY.register("schedule_free_radam")
 class RAdamScheduleFreeFactory(nn.Module):
