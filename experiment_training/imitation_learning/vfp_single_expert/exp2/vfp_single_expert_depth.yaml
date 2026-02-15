@@ -6,13 +6,13 @@ plugins:
 model:
   find_unused_parameters: true
   component_config_paths:
-    head_backbone: "trainer/experiment_models/vfp_single_expert/exp2/head_backbone.yaml"
-    left_backbone: "trainer/experiment_models/vfp_single_expert/exp2/left_backbone.yaml"
-    right_backbone: "trainer/experiment_models/vfp_single_expert/exp2/right_backbone.yaml"
-    info_embedder: "trainer/experiment_models/vfp_single_expert/exp2/info_embedder.yaml"
-    da3: "trainer/experiment_models/vfp_single_expert/exp2/da3.yaml"
+    head_backbone: "experiment_models/vfp_single_expert/exp2/head_backbone.yaml"
+    left_backbone: "experiment_models/vfp_single_expert/exp2/left_backbone.yaml"
+    right_backbone: "experiment_models/vfp_single_expert/exp2/right_backbone.yaml"
+    info_embedder: "experiment_models/vfp_single_expert/exp2/info_embedder.yaml"
+    da3: "experiment_models/vfp_single_expert/exp2/da3.yaml"
     #multimodal_bridge: "experiment_models/vfp_single_expert/exp2/multimodal_bridge.yaml"
-    action_decoder: "trainer/experiment_models/vfp_single_expert/exp2/action_decoder.yaml"
+    action_decoder: "experiment_models/vfp_single_expert/exp2/action_decoder.yaml"
     
   component_build_args:
     head_backbone:
