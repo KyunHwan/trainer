@@ -5,30 +5,30 @@ import os
 import gc
 from pathlib import Path
 
-from trainer.config.loader import load_config
-from trainer.config.schemas import ExperimentConfig, validate_config
-from trainer.config.schemas import OptimizerParams
-from trainer.modeling.factories import PolicyConstructorModelFactory
-from trainer.registry import (
+from trainer.trainer.config.loader import load_config
+from trainer.trainer.config.schemas import ExperimentConfig, validate_config
+from trainer.trainer.config.schemas import OptimizerParams
+from trainer.trainer.modeling.factories import PolicyConstructorModelFactory
+from trainer.trainer.registry import (
     TRAINER_REGISTRY,
     DATASET_BUILDER_REGISTRY,
     OPTIMIZER_BUILDER_REGISTRY,
     LOSS_BUILDER_REGISTRY,
 )
 
-from trainer.templates import (
+from trainer.trainer.templates import (
     DatasetFactory,
     LossFactory,
     OptimizerFactory,
     Trainer
 )
-from trainer.registry.plugins import load_plugins
-from trainer.utils.import_utils import instantiate
-from trainer.utils.seed import *
+from trainer.trainer.registry.plugins import load_plugins
+from trainer.trainer.utils.import_utils import instantiate
+from trainer.trainer.utils.seed import *
 import argparse
 
-from trainer.utils.device import move_to_device, cast_dtype
-from trainer.utils.tree import tree_map
+from trainer.trainer.utils.device import move_to_device, cast_dtype
+from trainer.trainer.utils.tree import tree_map
 
 import ray
 import ray.train
