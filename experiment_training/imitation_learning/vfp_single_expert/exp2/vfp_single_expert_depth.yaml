@@ -133,7 +133,7 @@ data:
       task_name: 'picknplace'
       local_files_only: false
       root: '.'
-      repo_id: 'joon001001/igris-b-pnp-v4'
+      repo_id: '/home/user/.cache/huggingface/lerobot/joon001001/igris-b-pnp-v4'
       action_horizon: 40
       obs_proprio_history: 40
       obs_images_history: 1
