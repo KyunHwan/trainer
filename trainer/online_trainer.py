@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import gc
+import time
 from pathlib import Path
 
 from trainer.trainer.config.loader import load_config
@@ -442,10 +443,14 @@ def train_func(config_path: str) -> None:
         replay_buffer_size = 0
         while replay_buffer_size < config.data.batch_size * 2 * world_size:
             replay_buffer_size = ray.get(replay_buffer.size.remote())
+            time.sleep(1.0)
+            
+        if rank == 0:
+            print("replay buffer has been filled!")
             print("replay buffer size: ", replay_buffer_size)
-        print("replay buffer has been filled!")
-        _dist_barrier(enable_dist_train, local_rank)
         
+        _dist_barrier(enable_dist_train, local_rank)
+
         while True:
             # --- Source A: Offline Data ---
             try:
