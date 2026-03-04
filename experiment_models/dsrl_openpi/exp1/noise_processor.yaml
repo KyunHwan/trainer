@@ -6,7 +6,8 @@ schema_version: 1
 # the noise actor only conditions on observation state.
 
 params:
-  depth_data_keys: ['head_depth']
+  proprio_key: 'proprio'
+  depth_data_keys: []
   img_data_keys: ['head', 'left', 'right']
   input_img_channel: 1024
   input_depth_channel: 1024
@@ -19,6 +20,7 @@ model:
     modules:
       noise_proc:
         _type_: dsrl_noise_actor_processor
+        proprio_key: ${params.proprio_key}
         depth_data_keys: ${params.depth_data_keys}
         img_data_keys: ${params.img_data_keys}
         input_img_channel: ${params.input_img_channel}

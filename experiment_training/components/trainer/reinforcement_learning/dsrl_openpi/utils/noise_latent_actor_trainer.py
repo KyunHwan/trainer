@@ -5,46 +5,42 @@ from schedulefree.adamw_schedulefree import AdamWScheduleFree as adamw_free
 
 class Noise_Latent_Actor_Trainer(nn.Module):
     def __init__(self, 
-                 noise_latent_critic, 
-                 noise_latent_actor,
-                 lr: float=3e-4):
+                 models,
+                 device,
+                #  noise_latent_critic, 
+                #  noise_latent_actor
+                ):
         super().__init__()
-        self.noise_latent_Q = noise_latent_critic
-        self.noise_latent_actor = noise_latent_actor
-        self.lr = lr
-        self.optimizer = self._make_optimizer()
+        self.models = models
+        self.device = device
+        # self.noise_latent_Q = noise_latent_critic
+        # self.noise_latent_actor = noise_latent_actor
 
 
-    def forward(self, qpos, images):
+    def forward(self, data, stats):
         # need to prevent optimization to occur to noise_latent_critic such that backpropagation
         # doesn't happen for noise_latent_critic. 
         # and only allow backpropagation to happen for noise_latent_actor, 
         # such that only the weights for noise_latent_actor are updated
-        loss = self.noise_latent_Q(qpos, images, self.noise_latent_actor(qpos, images)) * -1.0
+
+        # Data preparation
+        cur_input_data = {
+            'head': None,
+            'left': None,
+            'right': None,
+            'proprio': None,
+            'action': None,
+        }
+        with torch.no_grad():
+            head_feat, _ = self.models['backbone'](data['observation.images.cam_head'][:, 1, :])
+            left_feat, _ = self.models['backbone'](data['observation.images.cam_left'][:, 1, :])
+            right_feat, _ = self.models['backbone'](data['observation.images.cam_right'][:, 1, :])
+            cur_input_data['head'] = head_feat
+            cur_input_data['left'] = left_feat
+            cur_input_data['right'] = right_feat
+            cur_input_data['proprio'] = (data['observation.state'][:, 50:, :] - stats['observation.state']['mean']) / (stats['observation.state']['std'] + 1e-8)
+
+        cur_input_data['action'] = self.models['noise_actor'](self.models['noise_processor'](cur_input_data))
+        loss = self.models['noise_q_function'](self.models['noise_q_function_processor'](cur_input_data)) * -1.0
+
         return loss.mean()
-
-    def _make_optimizer(self):
-        """
-        Build and return an optimizer that ONLY updates noise_latent_Q.
-        opt_type: "radam_free" or "adamw_free"
-        """
-        params = self.noise_latent_actor.parameters()
-        return radam_free(
-            params,
-            lr=self.lr,
-            betas=(0.95, 0.999),
-            silent_sgd_phase=True
-        )
-    
-    def serialize(self):
-        return self.noise_latent_actor.state_dict()
-
-    def deserialize(self, model_dict):
-        return self.noise_latent_actor.load_state_dict(model_dict, strict=True)
-
-    def serialize_optimizer(self):
-        return self.optimizer.state_dict()
-    
-    def deserialize_optimizer(self, optimizer_dict):
-        return self.optimizer.load_state_dict(optimizer_dict)
-        

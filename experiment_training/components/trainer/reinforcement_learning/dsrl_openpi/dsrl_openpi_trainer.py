@@ -27,6 +27,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+from .utils.action_critic_trainer import Action_Critic_Trainer
+from .utils.noise_latent_critic_trainer import Noise_Latent_Critic_Trainer
+from .utils.noise_latent_actor_trainer import Noise_Latent_Actor_Trainer
+
 from trainer.trainer.registry import TRAINER_REGISTRY
 
 
@@ -40,6 +44,8 @@ class DSRLOpenPITrainer(nn.Module):
       - ``da3``:                  GraphModel wrapping DepthAnything3Bridge (frozen)
       - ``q_function_processor``: GraphModel wrapping QFunctionImgDepthProprioProcessor
       - ``q_function``:           GraphModel wrapping Q_Function
+      - ``noise_q_function_processor``: GraphModel wrapping QFunctionImgDepthProprioProcessor
+      - ``noise_q_function``:           GraphModel wrapping Q_Function
       - ``noise_processor``:      GraphModel wrapping NoiseActorImgDepthProprioProcessor
       - ``noise_actor``:          GraphModel wrapping Noise_Latent_Actor
 
@@ -59,6 +65,29 @@ class DSRLOpenPITrainer(nn.Module):
         self.optimizers = optimizers
         self.loss = loss  # not used — losses are computed inline
         self.device = device
+
+        self.action_Q_trainer = Action_Critic_Trainer(
+            self.models,
+            self.device,
+            # self.action_Q, 
+            # self.flow_matching_policy, 
+            # self.noise_latent_actor,
+        )
+
+        self.noise_latent_Q_trainer = Noise_Latent_Critic_Trainer(
+            self.models,
+            self.device,
+            # self.action_Q, 
+            # self.noise_latent_Q, 
+            # self.flow_matching_policy,
+        )
+
+        self.noise_latent_actor_trainer = Noise_Latent_Actor_Trainer(
+            self.models,
+            self.device,
+            # self.noise_latent_Q, 
+            # self.noise_latent_actor,
+        )
 
     # ------------------------------------------------------------------
     # Forward
@@ -88,7 +117,7 @@ class DSRLOpenPITrainer(nn.Module):
         # ------------------------------------------------------------------
 
         
-        return loss_dict
+        return 
 
     # ------------------------------------------------------------------
     # train_step
@@ -99,15 +128,62 @@ class DSRLOpenPITrainer(nn.Module):
         data: dict[str, Any],
         stats: dict[str, Any]
     ) -> dict[str, Any]:
+
+        prompt_lists =\
+            ["Use the right hand to pick up the doll and place it into the box.",
+             "Use the left hand to pick up the doll and place it into the box.",
+             "Use the left hand to pick up the socks and place it into the box.",
+             "Use the right hand to pick up the socks and place it into the box.",
+             "Use the left hand to pick up the towel and place it into the box.", 
+             "Use the right hand to pick up the towel and place it into the box.",
+             "Use the left hand to pick up the packed black T-shirt and place it into the box.",
+             "Use the right hand to pick up the packed black T-shirt and place it into the box."]
+
+        # for openpi
+        data['prompt'] = [prompt_lists[int(idx)] for idx in data['task_index']]
+        loss_action_Q_trainer = {}
+        loss_noise_latent_Q_trainer = {}
+        loss_noise_latent_actor_trainer = {}
+
+
         self._ready_train()
         self._zero_grad()
-        loss = self.forward(data, stats)
-        self._backward(loss)
-        detached = self._clip_get_grad_norm(loss, clip_val=1.0)
-        self._step()
-        detached = self._detached_loss(detached)
-        detached = self._get_lr(detached)
-        return detached
+        loss_action_Q_trainer['Action Q Loss'] =\
+             self.action_Q_trainer(data, stats)
+        self._backward(loss_action_Q_trainer)
+        detached_loss_action_Q_trainer = self._clip_get_grad_norm(loss_action_Q_trainer, clip_val=1.0)
+        self.optimizers['q_function'].step()
+        self.optimizers['q_function_processor'].step()
+        self._zero_grad()
+        self.action_Q_trainer.update_target()
+        detached_loss_action_Q_trainer = self._detached_loss(detached_loss_action_Q_trainer)
+
+        self._ready_train()
+        self._zero_grad()
+        loss_noise_latent_Q_trainer['Noise Q Loss'] =\
+             self.noise_latent_Q_trainer(data, stats)
+        self._backward(loss_noise_latent_Q_trainer)
+        detached_loss_noise_latent_Q_trainer = self._clip_get_grad_norm(loss_noise_latent_Q_trainer, clip_val=1.0)
+        self.optimizers['noise_q_function'].step()
+        self.optimizers['noise_q_function_processor'].step()
+        self._zero_grad()
+        detached_loss_noise_latent_Q_trainer = self._detached_loss(detached_loss_noise_latent_Q_trainer)
+
+        self._ready_train()
+        self._zero_grad()
+        loss_noise_latent_actor_trainer['Noise Q Value'] =\
+             self.noise_latent_actor_trainer(data, stats)
+        self._backward(loss_noise_latent_actor_trainer)
+        detached_loss_noise_latent_actor_trainer = self._clip_get_grad_norm(loss_noise_latent_actor_trainer, clip_val=1.0)
+        self.optimizers['noise_actor'].step()
+        self.optimizers['noise_processor'].step()
+        self._zero_grad()
+        detached_loss_noise_latent_actor_trainer = self._detached_loss(detached_loss_noise_latent_actor_trainer)
+
+        metrics = detached_loss_action_Q_trainer
+        metrics.update(detached_loss_noise_latent_Q_trainer)
+        metrics.update(detached_loss_noise_latent_actor_trainer)
+        return metrics
 
     # ------------------------------------------------------------------
     # Boilerplate (identical pattern to existing trainers in the project)

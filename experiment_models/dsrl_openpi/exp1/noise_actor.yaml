@@ -10,10 +10,10 @@ schema_version: 1
 # Adjust if your camera resolution differs from 224x224.
 
 params:
-  input_dim: 21216
+  input_dim: 49584
   action_chunk_size: 50
-  action_dim: 24
-  num_layers: 3
+  action_dim: 32
+  num_layers: 5
   num_hidden_dim: 2048
   dropout: 0.0
 

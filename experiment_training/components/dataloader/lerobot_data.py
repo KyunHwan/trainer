@@ -29,18 +29,31 @@ class LerobotDatasetFactory:
         # Calculate the time step in seconds
         dt = 1.0 / HZ
 
+        """
         # Actions: from 0 (current) up to (horizon-1) steps in the future
-        action_timestamps = [i * dt for i in range(1, action_horizon+1)]
+        action_timestamps = [i * dt for i in range(action_horizon)]
         
         # Observations: from 0 (current) to -(history-1) steps in the past
         obs_proprio_timestamps = [i * dt for i in range(0, -obs_proprio_history, -1)]
         obs_images_timestamps = [i * dt for i in range(0, -obs_images_history, -1)]
+        """
+
+
+        # Q-Chunking
+        # Actions: from 0 (current) up to (horizon-1) steps in the future
+        action_timestamps = [i * dt for i in range(action_horizon)]
+        reward_timestamps = [i * dt for i in range(action_horizon)]
+
+        # Observations: from 0 (current) to -(history-1) steps in the past
+        obs_proprio_timestamps = [i * dt for i in range(obs_proprio_history, -obs_proprio_history, -1)]
+        obs_images_timestamps = [i * dt for i in range(obs_proprio_history, -1, -obs_proprio_history)]
+
 
         # Construct the config dictionary
         # You may need to adjust keys like 'observation.state' depending on your specific dataset columns
         delta_timestamps = {
             "action": action_timestamps,
-            "labels.reward": action_timestamps,
+            "labels.reward": reward_timestamps,
             "observation.current": obs_proprio_timestamps,
             "observation.state": obs_proprio_timestamps,
             "observation.images.cam_right": obs_images_timestamps,

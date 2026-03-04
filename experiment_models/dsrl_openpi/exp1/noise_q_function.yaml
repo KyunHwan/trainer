@@ -11,7 +11,7 @@ schema_version: 1
 # Adjust if your camera resolution differs from 224x224.
 
 params:
-  input_dim: 50784
+  input_dim: 51184
   num_ensemble: 10
   num_layers: 4
   num_hidden_dim: 2048

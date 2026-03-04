@@ -5,22 +5,26 @@ plugins:
   - "experiment_training.components.trainer.reinforcement_learning.dsrl_openpi.dsrl_openpi_trainer"
 
 model:
-  find_unused_parameters: false
+  find_unused_parameters: true
   component_config_paths:
     openpi_model:         "experiment_models/dsrl_openpi/exp1/openpi_model.yaml"
     backbone:             "experiment_models/dsrl_openpi/exp1/backbone.yaml"
-    da3:                  "experiment_models/dsrl_openpi/exp1/da3.yaml"
+    #da3:                  "experiment_models/dsrl_openpi/exp1/da3.yaml"
     q_function_processor: "experiment_models/dsrl_openpi/exp1/q_function_processor.yaml"
     q_function:           "experiment_models/dsrl_openpi/exp1/q_function.yaml"
+    noise_q_function:     "experiment_models/dsrl_openpi/exp1/noise_q_function.yaml"
+    noise_q_function_processor: "experiment_models/dsrl_openpi/exp1/noise_q_function_processor.yaml"
     noise_processor:      "experiment_models/dsrl_openpi/exp1/noise_processor.yaml"
     noise_actor:          "experiment_models/dsrl_openpi/exp1/noise_actor.yaml"
 
   component_build_args:
     openpi_model:         { init: false, freeze: true }   # frozen pretrained diffusion policy
     backbone:             { init: false, freeze: true }   # frozen pretrained vision encoder
-    da3:                  { init: false, freeze: true }   # frozen depth estimator
+    #da3:                  { init: false, freeze: true }   # frozen depth estimator
     q_function_processor: { init: true,  freeze: false }
     q_function:           { init: true,  freeze: false }
+    noise_q_function:     { init: true,  freeze: false }
+    noise_q_function_processor:  { init: true,  freeze: false }
     noise_processor:      { init: true,  freeze: false }
     noise_actor:          { init: true,  freeze: false }
 
@@ -37,6 +41,28 @@ model:
         start_lr: 1.0e-6
         end_lr: 1.0e-6
     q_function:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        peak_lr: 3.0e-4
+        betas: [0.9, 0.999]
+        eps: 1.0e-10
+        weight_decay: 1.0e-5
+        total_steps: 200000
+        warmup_steps: 2000
+        start_lr: 1.0e-6
+        end_lr: 1.0e-6
+    noise_q_function_processor:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        peak_lr: 3.0e-4
+        betas: [0.9, 0.999]
+        eps: 1.0e-10
+        weight_decay: 1.0e-5
+        total_steps: 200000
+        warmup_steps: 2000
+        start_lr: 1.0e-6
+        end_lr: 1.0e-6
+    noise_q_function:
       type: "adamw_warmup_cosine_decay"
       params:
         peak_lr: 3.0e-4
@@ -82,8 +108,8 @@ data:
       obs_proprio_history: 50
       obs_images_history: 1
       HZ: 20
-  batch_size: 32
-  num_workers: 8
+  batch_size: 80
+  num_workers: 12
   pin_memory: true
   persistent_workers: true
   prefetch_factor: 1

@@ -438,6 +438,7 @@ def train(config_path: str) -> None:
                     - action
                     - observation.state
                     - observation.current
+                    - observation.images.cam_head
                     - labels.reward
                     - task_index
 
