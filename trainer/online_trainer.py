@@ -426,7 +426,7 @@ def train_func(config_path: str) -> None:
             print("replay buffer size: ", replay_buffer_size)
         
         _dist_barrier(enable_dist_train, local_rank)
-
+        stats_gpu = move_to_device(stats_cpu, device)
         while True:
             # --- Source A: Offline Data ---
             try:
@@ -445,7 +445,6 @@ def train_func(config_path: str) -> None:
             online_data = ray.get(future)
 
             # --- Combine & Train ---
-            stats_gpu = move_to_device(stats_cpu, device)
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 # normalize offline data
                 offline_data['action'] = (offline_data['action'] - stats_gpu['action']['mean']) / (stats_gpu['action']['std'] + 1e-8)
@@ -461,7 +460,8 @@ def train_func(config_path: str) -> None:
 
                 # normalize online data
                 data = cast_dtype(data, torch.float32)
-                loss_dict = trainer.train_step(data=move_to_device(data, device), iterations=iterations, epoch=epoch, total_epochs=config.train.epoch)
+                data = move_to_device(data, device)
+                loss_dict = trainer.train_step(data=data, stats=stats_gpu)
                 
                 if rank == 0:
                     _record(loss_dict, iterations, num_iter_per_epoch)
