@@ -145,7 +145,6 @@ class DSRLOpenPITrainer(nn.Module):
         loss_noise_latent_Q_trainer = {}
         loss_noise_latent_actor_trainer = {}
 
-
         self._ready_train()
         self._zero_grad()
         loss_action_Q_trainer['Action Q Loss'] =\

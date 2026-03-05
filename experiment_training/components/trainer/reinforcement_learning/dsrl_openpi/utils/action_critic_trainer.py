@@ -96,8 +96,6 @@ class Action_Critic_Trainer(nn.Module):
         loss = self.loss_func(self.models['q_function'](self.models['q_function_processor'](cur_input_data)),\
                               data['reward_chunk'] + (self.discount_factor ** 50) * Q_target_output)
         return loss
-    
-
 
 
     def _unwrap_model(self, net):
