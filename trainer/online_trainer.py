@@ -443,20 +443,23 @@ def train_func(config_path: str) -> None:
             # (Or you can shard this too, but random sampling is usually sufficient)
             future = replay_buffer.sample.remote(batch_size=config.data.batch_size)
             online_data = ray.get(future)
+            _dist_barrier(enable_dist_train, local_rank) # wait until all the other workers have gotten the online data
 
             # --- Combine & Train ---
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 # normalize offline data
-                offline_data['action'] = (offline_data['action'] - stats_gpu['action']['mean']) / (stats_gpu['action']['std'] + 1e-8)
-                offline_data['observation.state'] = (offline_data['observation.state'] - stats_gpu['observation.state']['mean']) / (stats_gpu['observation.state']['std'] + 1e-8)
-                offline_data['observation.current'] = (offline_data['observation.current'] - stats_gpu['observation.current']['mean']) / (stats_gpu['observation.current']['std'] + 1e-8)
-                offline_data['observation.proprio_state'] = offline_data['observation.state']
-                offline_data['observation.state'] = torch.concat([offline_data['observation.state'], offline_data['observation.current']], dim=-1)
+                # offline_data['action'] = (offline_data['action'] - stats_gpu['action']['mean']) / (stats_gpu['action']['std'] + 1e-8)
+                # offline_data['observation.state'] = (offline_data['observation.state'] - stats_gpu['observation.state']['mean']) / (stats_gpu['observation.state']['std'] + 1e-8)
+                # offline_data['observation.current'] = (offline_data['observation.current'] - stats_gpu['observation.current']['mean']) / (stats_gpu['observation.current']['std'] + 1e-8)
+                # offline_data['observation.proprio_state'] = offline_data['observation.state']
+                # offline_data['observation.state'] = torch.concat([offline_data['observation.state'], offline_data['observation.current']], dim=-1)
                 
                 
                 # combine online & offline data
-                # online_data
-                data = offline_data
+                online_dict = {k: online_data[k] for k in online_data.keys()}
+                shared_keys = offline_data.keys() & online_dict.keys()
+                data = {key: torch.cat([offline_data[key], online_dict[key]], dim=0)
+                        for key in shared_keys}
 
                 # normalize online data
                 data = cast_dtype(data, torch.float32)
