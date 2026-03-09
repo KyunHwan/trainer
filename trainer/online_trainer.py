@@ -40,6 +40,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.distributed as dist
+from torchvision.transforms import Resize
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
@@ -456,8 +457,8 @@ def train_func(config_path: str) -> None:
 
             shared_keys = offline_data.keys() & online_data.keys()
 
-            print([f"{key}: {online_data[key].shape}" for key in shared_keys])
-            print([f"{key}: {offline_data[key].shape}" for key in shared_keys])
+            # print([f"{key}: {online_data[key].shape}" for key in shared_keys])
+            # print([f"{key}: {offline_data[key].shape}" for key in shared_keys])
 
             offline_data = cast_dtype(offline_data, torch.float32)
             offline_data = move_to_device(offline_data, device)
@@ -466,9 +467,15 @@ def train_func(config_path: str) -> None:
             online_data = move_to_device(online_data, device)
 
             
-
-            data = {key: torch.cat([offline_data[key], online_data[key]], dim=0)
-                    for key in shared_keys}
+            data = {
+                key: torch.cat([
+                    offline_data[key], 
+                    Resize(offline_data[key].shape[-2:], antialias=True)(online_data[key]) if "cam" in key else online_data[key]
+                ], dim=0)
+                for key in shared_keys
+            }
+            # data = {key: torch.cat([offline_data[key], online_data[key]], dim=0)
+            #         for key in shared_keys}
 
             # --- Combine & Train ---
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
