@@ -1,6 +1,7 @@
 """Public API entrypoint for training."""
 from __future__ import annotations
 
+import sys
 import os
 import gc
 import time
@@ -360,6 +361,11 @@ def _record(loss_dict: dict[str, Any], iterations: int, num_iter_per_epoch: floa
 
 
 def train_func(config_path: str) -> None:
+    # Ensure experiment_training (and other trainer-level packages) are importable
+    _trainer_pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _trainer_pkg_dir not in sys.path:
+        sys.path.insert(0, _trainer_pkg_dir)
+    
     """Train an experiment specified entirely by YAML config."""
     raw = load_config(config_path)
     config: ExperimentConfig = validate_config(raw)
