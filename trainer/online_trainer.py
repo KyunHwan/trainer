@@ -433,6 +433,7 @@ def train_func(config_path: str) -> None:
             print("replay buffer size: ", replay_buffer_size)
         
         _dist_barrier(enable_dist_train, local_rank)
+        stats_cpu = cast_dtype(stats_cpu, torch.float32)
         stats_gpu = move_to_device(stats_cpu, device)
         while True:
             # --- Source A: Offline Data ---
