@@ -449,7 +449,19 @@ def train_func(config_path: str) -> None:
             # (Or you can shard this too, but random sampling is usually sufficient)
             future = replay_buffer.sample.remote(batch_size=config.data.batch_size)
             online_data = ray.get(future)
+            online_data = {k: online_data[k] for k in online_data.keys()}
             _dist_barrier(enable_dist_train, local_rank) # wait until all the other workers have gotten the online data
+            
+            shared_keys = offline_data.keys() & online_data.keys()
+
+            offline_data = cast_dtype(offline_data, torch.float32)
+            offline_data = move_to_device(offline_data, device)
+
+            online_data = cast_dtype(online_data, torch.float32)
+            online_data = move_to_device(online_data, device)
+
+            data = {key: torch.cat([offline_data[key], online_data[key]], dim=0)
+                    for key in shared_keys}
 
             # --- Combine & Train ---
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
@@ -462,14 +474,7 @@ def train_func(config_path: str) -> None:
                 
                 
                 # combine online & offline data
-                online_dict = {k: online_data[k] for k in online_data.keys()}
-                shared_keys = offline_data.keys() & online_dict.keys()
-                data = {key: torch.cat([offline_data[key], online_dict[key]], dim=0)
-                        for key in shared_keys}
-
-                # normalize online data
-                data = cast_dtype(data, torch.float32)
-                data = move_to_device(data, device)
+                
                 loss_dict = trainer.train_step(data=data, stats=stats_gpu)
                 
                 if rank == 0:
