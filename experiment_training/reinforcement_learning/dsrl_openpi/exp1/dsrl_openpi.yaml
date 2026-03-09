@@ -117,9 +117,9 @@ data:
 train:
   project_name: 'dsrl_openpi_exp1'
   epoch: 500
-  load_dir: null
-  save_every: 5
-  save_dir: "experiment_training/reinforcement_learning/dsrl_openpi/exp1"
+  load_dir: "/home/user/Projects/online_rl/trainer/experiment_training/reinforcement_learning/dsrl_openpi/exp1/epoch_15"
+  save_every: 20
+  save_dir: "/home/user/Projects/online_rl/trainer/experiment_training/reinforcement_learning/dsrl_openpi/online_rl"
   trainer:
     type: 'dsrl_openpi_trainer'
   loss:
