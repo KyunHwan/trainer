@@ -1,6 +1,7 @@
 """Public API entrypoint for training."""
 from __future__ import annotations
 
+import sys
 import os
 import gc
 import time
@@ -39,6 +40,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.distributed as dist
+from torchvision.transforms import Resize
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
@@ -360,6 +362,11 @@ def _record(loss_dict: dict[str, Any], iterations: int, num_iter_per_epoch: floa
 
 
 def train_func(config_path: str) -> None:
+    # Ensure experiment_training (and other trainer-level packages) are importable
+    _trainer_pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _trainer_pkg_dir not in sys.path:
+        sys.path.insert(0, _trainer_pkg_dir)
+    
     """Train an experiment specified entirely by YAML config."""
     raw = load_config(config_path)
     config: ExperimentConfig = validate_config(raw)
@@ -426,6 +433,7 @@ def train_func(config_path: str) -> None:
             print("replay buffer size: ", replay_buffer_size)
         
         _dist_barrier(enable_dist_train, local_rank)
+        stats_cpu = cast_dtype(stats_cpu, torch.float32)
         stats_gpu = move_to_device(stats_cpu, device)
         while True:
             # --- Source A: Offline Data ---
@@ -443,7 +451,44 @@ def train_func(config_path: str) -> None:
             # (Or you can shard this too, but random sampling is usually sufficient)
             future = replay_buffer.sample.remote(batch_size=config.data.batch_size)
             online_data = ray.get(future)
+            online_data = {k: online_data[k] for k in online_data.keys()}
             _dist_barrier(enable_dist_train, local_rank) # wait until all the other workers have gotten the online data
+            
+            
+
+            shared_keys = offline_data.keys() & online_data.keys()
+
+            print([f"online == {key}: {online_data[key].shape}" for key in shared_keys])
+            print([f"offline == {key}: {offline_data[key].shape}" for key in shared_keys])
+
+            offline_data = cast_dtype(offline_data, torch.float32)
+            offline_data = move_to_device(offline_data, device)
+
+            online_data = cast_dtype(online_data, torch.float32)
+            online_data = move_to_device(online_data, device)
+
+            
+            data = {}
+            for key in shared_keys:
+                if "cam" in key:
+                    target_size = offline_data[key].shape[-2:]
+                    orig_shape = online_data[key].shape
+                    
+                    # 1. Flatten all leading dimensions to create a 4D tensor: (-1, C, H, W)
+                    # This safely handles both (B, C, H, W) and (B, T, C, H, W)
+                    flat_online = online_data[key].view(-1, orig_shape[-3], orig_shape[-2], orig_shape[-1])
+                    
+                    # 2. Apply Resize
+                    resized_flat = Resize(target_size, antialias=True)(flat_online)
+                    
+                    # 3. Restore the original leading dimensions, appending the new target size
+                    resized_online = resized_flat.view(*orig_shape[:-2], *target_size)
+                    
+                    data[key] = torch.cat([offline_data[key], resized_online], dim=0)
+                else:
+                    data[key] = torch.cat([offline_data[key], online_data[key]], dim=0)
+            # data = {key: torch.cat([offline_data[key], online_data[key]], dim=0)
+            #         for key in shared_keys}
 
             # --- Combine & Train ---
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
@@ -456,14 +501,7 @@ def train_func(config_path: str) -> None:
                 
                 
                 # combine online & offline data
-                online_dict = {k: online_data[k] for k in online_data.keys()}
-                shared_keys = offline_data.keys() & online_dict.keys()
-                data = {key: torch.cat([offline_data[key], online_dict[key]], dim=0)
-                        for key in shared_keys}
-
-                # normalize online data
-                data = cast_dtype(data, torch.float32)
-                data = move_to_device(data, device)
+                
                 loss_dict = trainer.train_step(data=data, stats=stats_gpu)
                 
                 if rank == 0:

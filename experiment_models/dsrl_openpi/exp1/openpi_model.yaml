@@ -2,7 +2,7 @@ schema_version: 1
 
 params:
   train_config_name: "pi05_igris"
-  ckpt_dir: "policy_constructor/model_constructor/blocks/experiments/third_party/checkpoints/cut1.2_15000"
+  ckpt_dir: "/home/user/Projects/online_rl/trainer/policy_constructor/model_constructor/blocks/experiments/third_party/checkpoints/cut1.2_15000"
   default_prompt: null
   action_dim: 24
   action_horizon: 50
