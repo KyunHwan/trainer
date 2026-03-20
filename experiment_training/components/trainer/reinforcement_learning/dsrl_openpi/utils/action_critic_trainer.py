@@ -22,6 +22,7 @@ class Action_Critic_Trainer(nn.Module):
 
         self.q_target = self._make_target(self.models['q_function']).to(self.device)
         self.q_function_processor_target = self._make_target(self.models['q_function_processor']).to(self.device)
+        self.q_function_img_encoder_target = self._make_target(self.models['q_function_img_encoder']).to(self.device)
 
         # self.flow_matching_policy = flow_matching_policy
         # self.noise_latent_actor = noise_latent_actor
@@ -31,13 +32,7 @@ class Action_Critic_Trainer(nn.Module):
     def forward(self, data, stats):
 
         # Data preparation
-        future_input_data = {
-            'head': None,
-            'left': None,
-            'right': None,
-            'proprio': None,
-            'action': None,
-        }
+        
         cur_input_data = {
             'head': None,
             'left': None,
@@ -45,26 +40,37 @@ class Action_Critic_Trainer(nn.Module):
             'proprio': None,
             'action': None,
         }
-        with torch.no_grad():
-            head_feat, _ = self.models['backbone'](data['observation.images.cam_head'][:, 0, :])
-            left_feat, _ = self.models['backbone'](data['observation.images.cam_left'][:, 0, :])
-            right_feat, _ = self.models['backbone'](data['observation.images.cam_right'][:, 0, :])
-            future_input_data['head'] = head_feat
-            future_input_data['left'] = left_feat
-            future_input_data['right'] = right_feat
-            future_input_data['proprio'] = (data['observation.state'][:, :50, :] - stats['observation.state']['mean']) / (stats['observation.state']['std'] + 1e-8)
+        future_feats = self.models['q_function_img_encoder']({
+            'head': data['observation.images.cam_head'][:, 0, :],
+            'left': data['observation.images.cam_left'][:, 0, :],
+            'right': data['observation.images.cam_right'][:, 0, :],
+        })
 
-            _head_feat, _ = self.models['backbone'](data['observation.images.cam_head'][:, 1, :])
-            _left_feat, _ = self.models['backbone'](data['observation.images.cam_left'][:, 1, :])
-            _right_feat, _ = self.models['backbone'](data['observation.images.cam_right'][:, 1, :])
-            cur_input_data['head'] = _head_feat
-            cur_input_data['left'] = _left_feat
-            cur_input_data['right'] = _right_feat
-            cur_input_data['proprio'] = (data['observation.state'][:, 50:, :] - stats['observation.state']['mean']) / (stats['observation.state']['std'] + 1e-8)
-            cur_input_data['action'] = (data['action'] - stats['action']['mean']) / (stats['action']['std'] + 1e-8)
+        cur_feats = self.models['q_function_img_encoder']({
+            'head': data['observation.images.cam_head'][:, 1, :],
+            'left': data['observation.images.cam_left'][:, 1, :],
+            'right': data['observation.images.cam_right'][:, 1, :],
+        })
+        cur_input_data['head'] = cur_feats['head']
+        cur_input_data['left'] = cur_feats['left']
+        cur_input_data['right'] = cur_feats['right']
+        cur_input_data['proprio'] = (data['observation.state'][:, 50:, :] - stats['observation.state']['mean']) / (stats['observation.state']['std'] + 1e-8)
+        cur_input_data['action'] = (data['action'] - stats['action']['mean']) / (stats['action']['std'] + 1e-8)
 
         Q_target_output = None
         with torch.no_grad():
+            future_input_data = {
+            'head': None,
+            'left': None,
+            'right': None,
+            'proprio': None,
+            'action': None,
+            }
+            future_input_data['head'] = future_feats['head']
+            future_input_data['left'] = future_feats['left']
+            future_input_data['right'] = future_feats['right']
+            future_input_data['proprio'] = (data['observation.state'][:, :50, :] - stats['observation.state']['mean']) / (stats['observation.state']['std'] + 1e-8)
+            
             processor_output = self.models['noise_processor'](future_input_data)
             noise = self.models['noise_actor'](processor_output)
             action_chunk = self.models['openpi_model'](observation = {
@@ -73,11 +79,21 @@ class Action_Critic_Trainer(nn.Module):
                                                                 'left': data['observation.images.cam_left'][:, 0, :].detach().cpu().to(torch.float32).numpy(),
                                                                 'right': data['observation.images.cam_right'][:, 0, :].detach().cpu().to(torch.float32).numpy(),
                                                                 'prompt': data['prompt']
-                                                              }, 
+                                                              },
                                                         noise=noise.detach().cpu().to(torch.float32).numpy())
-            future_input_data['action'] = (action_chunk.to(torch.float32) - stats['action']['mean']) / (stats['action']['std'] + 1e-8)
-
-            Q_target_output = self.q_target(self.q_function_processor_target(future_input_data))
+            future_target_feats = self.q_function_img_encoder_target({
+                'head': data['observation.images.cam_head'][:, 0, :],
+                'left': data['observation.images.cam_left'][:, 0, :],
+                'right': data['observation.images.cam_right'][:, 0, :],
+            })
+            future_target_data = {
+                'head': future_target_feats['head'],
+                'left': future_target_feats['left'],
+                'right': future_target_feats['right'],
+                'proprio': future_input_data['proprio'],
+                'action': (action_chunk.to(torch.float32) - stats['action']['mean']) / (stats['action']['std'] + 1e-8),
+            }
+            Q_target_output = self.q_target(self.q_function_processor_target(future_target_data))
 
         # Q-chunking
         reward_tensor = data['labels.reward']
@@ -127,4 +143,8 @@ class Action_Critic_Trainer(nn.Module):
 
         q_preprocessor_source_net = self._unwrap_model(self.models['q_function_processor'])
         for p_src, p_tgt in zip(q_preprocessor_source_net.parameters(), self.q_function_processor_target.parameters()):
+            p_tgt.data.mul_(1.0 - self.target_update_rate).add_(self.target_update_rate * p_src.data)
+
+        q_img_encoder_source_net = self._unwrap_model(self.models['q_function_img_encoder'])
+        for p_src, p_tgt in zip(q_img_encoder_source_net.parameters(), self.q_function_img_encoder_target.parameters()):
             p_tgt.data.mul_(1.0 - self.target_update_rate).add_(self.target_update_rate * p_src.data)

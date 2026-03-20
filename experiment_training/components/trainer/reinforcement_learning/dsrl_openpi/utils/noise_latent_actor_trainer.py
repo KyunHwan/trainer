@@ -31,13 +31,15 @@ class Noise_Latent_Actor_Trainer(nn.Module):
             'proprio': None,
             'action': None,
         }
+        feats = self.models['noise_actor_img_encoder']({
+            'head': data['observation.images.cam_head'][:, 1, :],
+            'left': data['observation.images.cam_left'][:, 1, :],
+            'right': data['observation.images.cam_right'][:, 1, :],
+        })
+        cur_input_data['head'] = feats['head']
+        cur_input_data['left'] = feats['left']
+        cur_input_data['right'] = feats['right']
         with torch.no_grad():
-            head_feat, _ = self.models['backbone'](data['observation.images.cam_head'][:, 1, :])
-            left_feat, _ = self.models['backbone'](data['observation.images.cam_left'][:, 1, :])
-            right_feat, _ = self.models['backbone'](data['observation.images.cam_right'][:, 1, :])
-            cur_input_data['head'] = head_feat
-            cur_input_data['left'] = left_feat
-            cur_input_data['right'] = right_feat
             cur_input_data['proprio'] = (data['observation.state'][:, 50:, :] - stats['observation.state']['mean']) / (stats['observation.state']['std'] + 1e-8)
 
         cur_input_data['action'] = self.models['noise_actor'](self.models['noise_processor'](cur_input_data))

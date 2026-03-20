@@ -32,14 +32,15 @@ class Noise_Latent_Critic_Trainer(nn.Module):
             'proprio': None,
             'action': None,
         }
-        with torch.no_grad():
-            head_feat, _ = self.models['backbone'](data['observation.images.cam_head'][:, 1, :])
-            left_feat, _ = self.models['backbone'](data['observation.images.cam_left'][:, 1, :])
-            right_feat, _ = self.models['backbone'](data['observation.images.cam_right'][:, 1, :])
-            input_data['head'] = head_feat
-            input_data['left'] = left_feat
-            input_data['right'] = right_feat
-            input_data['proprio'] = (data['observation.state'][:, 50:, :] - stats['observation.state']['mean']) / (stats['observation.state']['std'] + 1e-8)
+        feats = self.models['noise_q_function_img_encoder']({
+            'head': data['observation.images.cam_head'][:, 1, :],
+            'left': data['observation.images.cam_left'][:, 1, :],
+            'right': data['observation.images.cam_right'][:, 1, :],
+        })
+        input_data['head'] = feats['head']
+        input_data['left'] = feats['left']
+        input_data['right'] = feats['right']
+        input_data['proprio'] = (data['observation.state'][:, 50:, :] - stats['observation.state']['mean']) / (stats['observation.state']['std'] + 1e-8)
 
         Q_output = None
         batch, _, _ = data['action'].shape

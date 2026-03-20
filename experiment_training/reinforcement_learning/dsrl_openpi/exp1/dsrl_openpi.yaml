@@ -8,7 +8,9 @@ model:
   find_unused_parameters: true
   component_config_paths:
     openpi_model:         "experiment_models/dsrl_openpi/exp1/openpi_model.yaml"
-    backbone:             "experiment_models/dsrl_openpi/exp1/backbone.yaml"
+    q_function_img_encoder: "experiment_models/dsrl_openpi/exp1/q_function_img_encoder.yaml"
+    noise_q_function_img_encoder: "experiment_models/dsrl_openpi/exp1/noise_q_function_img_encoder.yaml"
+    noise_actor_img_encoder: "experiment_models/dsrl_openpi/exp1/noise_actor_img_encoder.yaml"
     #da3:                  "experiment_models/dsrl_openpi/exp1/da3.yaml"
     q_function_processor: "experiment_models/dsrl_openpi/exp1/q_function_processor.yaml"
     q_function:           "experiment_models/dsrl_openpi/exp1/q_function.yaml"
@@ -19,7 +21,9 @@ model:
 
   component_build_args:
     openpi_model:         { init: false, freeze: true }   # frozen pretrained diffusion policy
-    backbone:             { init: false, freeze: true }   # frozen pretrained vision encoder
+    q_function_img_encoder:       { init: false, freeze: false }   # pretrained ResNet34 tri-camera encoder
+    noise_q_function_img_encoder: { init: false, freeze: false }   # pretrained ResNet34 tri-camera encoder
+    noise_actor_img_encoder:      { init: false, freeze: false }   # pretrained ResNet34 tri-camera encoder
     #da3:                  { init: false, freeze: true }   # frozen depth estimator
     q_function_processor: { init: true,  freeze: false }
     q_function:           { init: true,  freeze: false }
@@ -29,6 +33,39 @@ model:
     noise_actor:          { init: true,  freeze: false }
 
   component_optims:
+    q_function_img_encoder:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        peak_lr: 3.0e-4
+        betas: [0.9, 0.999]
+        eps: 1.0e-10
+        weight_decay: 1.0e-5
+        total_steps: 200000
+        warmup_steps: 2000
+        start_lr: 1.0e-6
+        end_lr: 1.0e-6
+    noise_q_function_img_encoder:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        peak_lr: 3.0e-4
+        betas: [0.9, 0.999]
+        eps: 1.0e-10
+        weight_decay: 1.0e-5
+        total_steps: 200000
+        warmup_steps: 2000
+        start_lr: 1.0e-6
+        end_lr: 1.0e-6
+    noise_actor_img_encoder:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        peak_lr: 3.0e-4
+        betas: [0.9, 0.999]
+        eps: 1.0e-10
+        weight_decay: 1.0e-5
+        total_steps: 200000
+        warmup_steps: 2000
+        start_lr: 1.0e-6
+        end_lr: 1.0e-6
     q_function_processor:
       type: "adamw_warmup_cosine_decay"
       params:
@@ -108,7 +145,7 @@ data:
       obs_proprio_history: 50
       obs_images_history: 1
       HZ: 20
-  batch_size: 80
+  batch_size: 128
   num_workers: 12
   pin_memory: true
   persistent_workers: true

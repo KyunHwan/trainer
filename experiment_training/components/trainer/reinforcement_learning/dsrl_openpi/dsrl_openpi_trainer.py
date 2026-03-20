@@ -153,6 +153,7 @@ class DSRLOpenPITrainer(nn.Module):
         detached_loss_action_Q_trainer = self._clip_get_grad_norm(loss_action_Q_trainer, clip_val=1.0)
         self.optimizers['q_function'].step()
         self.optimizers['q_function_processor'].step()
+        self.optimizers['q_function_img_encoder'].step()
         self._zero_grad()
         self.action_Q_trainer.update_target()
         detached_loss_action_Q_trainer = self._detached_loss(detached_loss_action_Q_trainer)
@@ -165,6 +166,7 @@ class DSRLOpenPITrainer(nn.Module):
         detached_loss_noise_latent_Q_trainer = self._clip_get_grad_norm(loss_noise_latent_Q_trainer, clip_val=1.0)
         self.optimizers['noise_q_function'].step()
         self.optimizers['noise_q_function_processor'].step()
+        self.optimizers['noise_q_function_img_encoder'].step()
         self._zero_grad()
         detached_loss_noise_latent_Q_trainer = self._detached_loss(detached_loss_noise_latent_Q_trainer)
 
@@ -176,6 +178,7 @@ class DSRLOpenPITrainer(nn.Module):
         detached_loss_noise_latent_actor_trainer = self._clip_get_grad_norm(loss_noise_latent_actor_trainer, clip_val=1.0)
         self.optimizers['noise_actor'].step()
         self.optimizers['noise_processor'].step()
+        self.optimizers['noise_actor_img_encoder'].step()
         self._zero_grad()
         detached_loss_noise_latent_actor_trainer = self._detached_loss(detached_loss_noise_latent_actor_trainer)
 

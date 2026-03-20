@@ -1,16 +1,14 @@
 schema_version: 1
 
 # input_dim = sum of all flattened noise_processor outputs (no action term):
-#   depth:  output_depth_channel * Hd * Wd  = 24 * 16 * 16 = 6144
-#   head:   output_img_channel * H' * W'    = 24 * 14 * 14 = 4704
-#   left:                                   = 24 * 14 * 14 = 4704
-#   right:                                  = 24 * 14 * 14 = 4704
-#   proprio: obs_history * obs_dim          = 40 * 24       = 960
-#   total:                                              = 21216
-# Adjust if your camera resolution differs from 224x224.
+#   head:   output_img_channel * H' * W'    = 24 * 8 * 10 = 1920  (ResNet34, 240x320 input)
+#   left:                                   = 24 * 8 * 10 = 1920
+#   right:                                  = 24 * 8 * 10 = 1920
+#   proprio: obs_history * obs_dim          = 50 * 24      = 1200
+#   total:                                              = 6960
 
 params:
-  input_dim: 49584
+  input_dim: 6960
   action_chunk_size: 50
   action_dim: 32
   num_layers: 5
