@@ -454,19 +454,16 @@ def train_func(config_path: str) -> None:
             online_data = {k: online_data[k] for k in online_data.keys()}
             _dist_barrier(enable_dist_train, local_rank) # wait until all the other workers have gotten the online data
             
-            
-
             shared_keys = offline_data.keys() & online_data.keys()
 
-            print([f"online == {key}: {online_data[key].shape}" for key in shared_keys])
-            print([f"offline == {key}: {offline_data[key].shape}" for key in shared_keys])
+            # print([f"online == {key}: {online_data[key].shape}" for key in shared_keys])
+            # print([f"offline == {key}: {offline_data[key].shape}" for key in shared_keys])
 
             offline_data = cast_dtype(offline_data, torch.float32)
             offline_data = move_to_device(offline_data, device)
 
             online_data = cast_dtype(online_data, torch.float32)
             online_data = move_to_device(online_data, device)
-
             
             data = {}
             for key in shared_keys:
