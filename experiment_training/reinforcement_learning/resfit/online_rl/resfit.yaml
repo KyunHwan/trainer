@@ -1,0 +1,70 @@
+plugins:
+  - "experiment_training.components.dataloader.resfit_lerobot_data"
+  - "experiment_training.components.loss.l2"
+  - "experiment_training.components.optimizer.adamw_cosine_decay"
+  - "experiment_training.components.trainer.reinforcement_learning.resfit.resfit_trainer"
+
+model:
+  find_unused_parameters: true
+  component_config_paths:
+    resfit_residual_actor: "experiment_models/resfit/exp1/resfit_residual_actor.yaml"
+    resfit_q_function:     "experiment_models/resfit/exp1/resfit_q_function.yaml"
+
+  component_build_args:
+    resfit_residual_actor: { init: false, freeze: false }
+    resfit_q_function:     { init: false, freeze: false }
+
+  component_optims:
+    resfit_residual_actor:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        peak_lr: 1.0e-4
+        betas: [0.9, 0.999]
+        eps: 1.0e-10
+        weight_decay: 1.0e-5
+        total_steps: 200000
+        warmup_steps: 2000
+        start_lr: 1.0e-6
+        end_lr: 1.0e-6
+    resfit_q_function:
+      type: "adamw_warmup_cosine_decay"
+      params:
+        peak_lr: 3.0e-4
+        betas: [0.9, 0.999]
+        eps: 1.0e-10
+        weight_decay: 1.0e-5
+        total_steps: 200000
+        warmup_steps: 2000
+        start_lr: 1.0e-6
+        end_lr: 1.0e-6
+
+data:
+  datamodule:
+    type: "resfit_lerobot_dataset_factory"
+    params:
+      task_name: 'resfit_online_rl'
+      local_files_only: false
+      root: '.'
+      repo_id: 'joon001001/igris-b-pnp-v5'
+      action_horizon: 4
+      reward_horizon: 3
+      obs_proprio_history: 1
+      obs_images_history: 1
+      HZ: 20
+  batch_size: 128
+  num_workers: 12
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 1
+
+train:
+  project_name: 'resfit_online_rl'
+  epoch: 500
+  load_dir: null
+  save_every: 20
+  save_dir: "/home/user/Projects/online_rl/trainer/experiment_training/reinforcement_learning/resfit/online_rl"
+  trainer:
+    type: 'resfit_trainer'
+  loss:
+    type: "l2_loss"
+    params: {}

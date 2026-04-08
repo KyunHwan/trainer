@@ -1,0 +1,61 @@
+schema_version: 1
+
+# Monolithic Q-function: Resnet34Group + QFunctionPreprocessor + ensemble MLPs.
+# Input: data dict {head, left, right, head_depth (opt), proprio, action}.
+# Output: mean Q-value across ensemble (batch, 1).
+#
+# input_dim = sum of all flattened preprocessor outputs:
+#   head:    output_img_channel * H' * W' = 24 * 8 * 10 = 1920  (ResNet34, 240x320 input)
+#   left:                                 = 24 * 8 * 10 = 1920
+#   right:                                = 24 * 8 * 10 = 1920
+#   proprio: 1 * obs_dim                  = 1 * 24       = 24
+#   action:  1 * action_dim              = 1 * 24       = 24
+#   total:                                              = 5808
+
+params:
+  img_resize: true
+  action_key: 'action'
+  proprio_key: 'proprio'
+  depth_data_keys: []
+  img_data_keys: ['head', 'left', 'right']
+  input_img_channel: 512
+  input_depth_channel: 1024
+  output_img_channel: 24
+  output_depth_channel: 24
+  input_dim: 5808
+  num_ensemble: 3
+  num_layers: 3
+  num_hidden_dim: 2048
+  dropout: 0.0
+  init_method: 'xavier'
+
+model:
+  graph:
+    inputs: [data, subsample_q, critic]
+    modules:
+      q_fn:
+        _type_: resfit_q_function
+        img_resize: ${params.img_resize}
+        action_key: ${params.action_key}
+        proprio_key: ${params.proprio_key}
+        depth_data_keys: ${params.depth_data_keys}
+        img_data_keys: ${params.img_data_keys}
+        input_img_channel: ${params.input_img_channel}
+        input_depth_channel: ${params.input_depth_channel}
+        output_img_channel: ${params.output_img_channel}
+        output_depth_channel: ${params.output_depth_channel}
+        input_dim: ${params.input_dim}
+        num_ensemble: ${params.num_ensemble}
+        num_layers: ${params.num_layers}
+        num_hidden_dim: ${params.num_hidden_dim}
+        dropout: ${params.dropout}
+        init_method: ${params.init_method}
+    nodes:
+      - name: q_value
+        call: module:q_fn
+        kwargs:
+          data: $data
+          subsample_q: $subsample_q
+          critic: $critic
+    outputs: [$q_value]
+    return: single

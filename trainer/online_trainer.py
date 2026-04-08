@@ -454,33 +454,44 @@ def train_func(config_path: str) -> None:
             online_data = {k: online_data[k] for k in online_data.keys()}
             _dist_barrier(enable_dist_train, local_rank) # wait until all the other workers have gotten the online data
             
+            if 'base_policy_action' in online_data.keys():
+                offline_data['base_policy_action'] = offline_data['action'].detach().clone()
+                
             shared_keys = offline_data.keys() & online_data.keys()
 
             # print([f"online == {key}: {online_data[key].shape}" for key in shared_keys])
             # print([f"offline == {key}: {offline_data[key].shape}" for key in shared_keys])
+            
 
             offline_data = cast_dtype(offline_data, torch.float32)
             offline_data = move_to_device(offline_data, device)
 
             online_data = cast_dtype(online_data, torch.float32)
             online_data = move_to_device(online_data, device)
-            
-            data = {}
+
+            data = {'iter': iterations}
             for key in shared_keys:
                 if "cam" in key:
+                    # Ensure both sources are float32 before concat
+                    # (cast_dtype skips uint8, so images may still be uint8 here)
+                    if offline_data[key].dtype == torch.uint8:
+                        offline_data[key] = offline_data[key].float()
+                    if online_data[key].dtype == torch.uint8:
+                        online_data[key] = online_data[key].float()
+
                     target_size = offline_data[key].shape[-2:]
                     orig_shape = online_data[key].shape
-                    
+
                     # 1. Flatten all leading dimensions to create a 4D tensor: (-1, C, H, W)
                     # This safely handles both (B, C, H, W) and (B, T, C, H, W)
                     flat_online = online_data[key].view(-1, orig_shape[-3], orig_shape[-2], orig_shape[-1])
-                    
+
                     # 2. Apply Resize
                     resized_flat = Resize(target_size, antialias=True)(flat_online)
-                    
+
                     # 3. Restore the original leading dimensions, appending the new target size
                     resized_online = resized_flat.view(*orig_shape[:-2], *target_size)
-                    
+
                     data[key] = torch.cat([offline_data[key], resized_online], dim=0)
                 else:
                     data[key] = torch.cat([offline_data[key], online_data[key]], dim=0)
