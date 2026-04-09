@@ -85,7 +85,7 @@ def map_list_to_torch(lst: list):
 
 def _dist_barrier(dist_enabled, local_rank) -> None:
     if dist_enabled:
-        dist.barrier(device_ids=[local_rank])
+        dist.barrier()#device_ids=[local_rank])
 
 
 def unwrap_model(model):
