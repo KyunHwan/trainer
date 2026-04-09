@@ -426,7 +426,8 @@ def train_func(config_path: str) -> None:
         replay_buffer_size = 0
         while replay_buffer_size < config.data.batch_size * 2 * world_size:
             replay_buffer_size = ray.get(replay_buffer.size.remote())
-            print(f"Updated replay buffer size: {replay_buffer_size}")
+            if rank == 0:
+                print(f"Updated replay buffer size: {replay_buffer_size}", flush=True)
             time.sleep(0.5)
             
         if rank == 0:
@@ -511,7 +512,7 @@ def train_func(config_path: str) -> None:
                 
                 
                 # combine online & offline data
-                print(f"Train iter: {iterations}")
+                print(f"Train iter: {iterations}", flush=True)
                 loss_dict = trainer.train_step(data=data, stats=stats_gpu)
                 
                 if rank == 0:
@@ -532,7 +533,7 @@ def train_func(config_path: str) -> None:
                             if not config.model.component_build_args[model_name]['freeze']:
                                 raw_model = unwrap_model(trainer.models[model_name])
                                 policy_components_weights[model_name] = {k: v.cpu() for k, v in raw_model.state_dict().items()}
-                                print(f"Iteration: {iterations} -- Model: {model_name} pushed from trainer")
+                                print(f"Iteration: {iterations} -- Model: {model_name} pushed from trainer", flush=True)
                         weights_ref = ray.put(policy_components_weights) # Push heavy data to Plasma
                         policy_state_manager.update_state.remote(weights_ref) # Push light reference
 
