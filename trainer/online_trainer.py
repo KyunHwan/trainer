@@ -459,8 +459,9 @@ def train_func(config_path: str) -> None:
                 
             shared_keys = offline_data.keys() & online_data.keys()
 
-            # print([f"online == {key}: {online_data[key].shape}" for key in shared_keys])
-            # print([f"offline == {key}: {offline_data[key].shape}" for key in shared_keys])
+            if rank == 0 and iterations == 0:
+                print([f"online == {key}: {online_data[key].shape}" for key in shared_keys])
+                print([f"offline == {key}: {offline_data[key].shape}" for key in shared_keys])
             
 
             offline_data = cast_dtype(offline_data, torch.float32)
@@ -539,6 +540,13 @@ def train_func(config_path: str) -> None:
             gc.collect() 
             torch.cuda.empty_cache()
             _dist_barrier(enable_dist_train, local_rank)
+
+    except Exception as e:
+        if rank == 0:
+            print(f"TRAINING ERROR at iteration {iterations}: {e}")
+            import traceback
+            traceback.print_exc()
+        raise
 
     finally:
         if rank == 0:
