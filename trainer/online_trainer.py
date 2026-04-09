@@ -424,15 +424,14 @@ def train_func(config_path: str) -> None:
         policy_state_manager = ray.get_actor("policy_state_manager")
 
         replay_buffer_size = 0
+        if rank == 0: print("Going into getting buffer...", flush=True)
         while replay_buffer_size < config.data.batch_size * 2 * world_size:
             replay_buffer_size = ray.get(replay_buffer.size.remote())
-            if rank == 0:
-                print(f"Updated replay buffer size: {replay_buffer_size}", flush=True)
             time.sleep(0.5)
             
         if rank == 0:
             print("replay buffer has been filled!")
-            print("replay buffer size: ", replay_buffer_size)
+            print(f"replay buffer size: {replay_buffer_size}", flush=True)
         
         _dist_barrier(enable_dist_train, local_rank)
         stats_cpu = cast_dtype(stats_cpu, torch.float32)
@@ -465,7 +464,6 @@ def train_func(config_path: str) -> None:
                 print([f"online == {key}: {online_data[key].shape}" for key in shared_keys])
                 print([f"offline == {key}: {offline_data[key].shape}" for key in shared_keys])
             
-
             offline_data = cast_dtype(offline_data, torch.float32)
             offline_data = move_to_device(offline_data, device)
 
@@ -512,7 +510,7 @@ def train_func(config_path: str) -> None:
                 
                 
                 # combine online & offline data
-                print(f"Train iter: {iterations}", flush=True)
+                if rank == 0: print(f"Train iter: {iterations}", flush=True)
                 loss_dict = trainer.train_step(data=data, stats=stats_gpu)
                 
                 if rank == 0:
@@ -545,12 +543,12 @@ def train_func(config_path: str) -> None:
 
     except Exception as e:
         if rank == 0:
-            print(f"TRAINING ERROR at iteration {iterations}: {e}")
+            print(f"TRAINING ERROR at iteration {iterations}: {e}", flush=True)
             import traceback
             traceback.print_exc()
         raise
 
     finally:
         if rank == 0:
-            print("program terminating...")
+            print("program terminating...", flush=True)
             wandb.finish()
