@@ -45,14 +45,14 @@ data:
       task_name: 'resfit_online_rl'
       local_files_only: false
       root: '.'
-      repo_id: 'joon001001/igris-b-pnp-v5'
+      repo_id: 'joon001001/igris-b-pnp-v4'
       action_horizon: 4
       reward_horizon: 3
       obs_proprio_history: 1
       obs_images_history: 1
       HZ: 20
   batch_size: 16
-  num_workers: 2
+  num_workers: 12
   pin_memory: true
   persistent_workers: true
   prefetch_factor: 1
