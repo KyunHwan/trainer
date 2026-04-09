@@ -430,8 +430,11 @@ def train_func(config_path: str) -> None:
             if rank == 0: print(f"replay buffer size: {replay_buffer_size}", flush=True)
             time.sleep(0.5)
         
-        
+        if rank == 0: print("Replay buffer has been filled!", flush=True)
+
         _dist_barrier(enable_dist_train, local_rank)
+
+        if rank == 0: print("Passed distributed barrier...", flush=True)
 
         stats_cpu = cast_dtype(stats_cpu, torch.float32)
         stats_gpu = move_to_device(stats_cpu, device)
