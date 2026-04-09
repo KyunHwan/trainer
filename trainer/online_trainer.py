@@ -428,7 +428,6 @@ def train_func(config_path: str) -> None:
             print("Going into getting buffer...", flush=True)
             while replay_buffer_size < config.data.batch_size * 2 * world_size:
                 replay_buffer_size = ray.get(replay_buffer.size.remote())
-                time.sleep(0.5)
             print(f"replay buffer size: {replay_buffer_size}", flush=True)
         
         _dist_barrier(enable_dist_train, local_rank)
