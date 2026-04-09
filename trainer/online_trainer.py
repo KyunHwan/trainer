@@ -424,14 +424,15 @@ def train_func(config_path: str) -> None:
         policy_state_manager = ray.get_actor("policy_state_manager")
 
         replay_buffer_size = 0
-        print("Going into getting buffer...", flush=True)
+        if rank == 0: print("Going into getting buffer...", flush=True)
         while replay_buffer_size < config.data.batch_size * 2 * world_size:
             replay_buffer_size = ray.get(replay_buffer.size.remote())
-            time.sleep(1.0)
-        print(f"replay buffer size: {replay_buffer_size}", flush=True)
+            if rank == 0: print(f"replay buffer size: {replay_buffer_size}", flush=True)
+            time.sleep(0.5)
+        
         
         _dist_barrier(enable_dist_train, local_rank)
-        
+
         stats_cpu = cast_dtype(stats_cpu, torch.float32)
         stats_gpu = move_to_device(stats_cpu, device)
         while True:
