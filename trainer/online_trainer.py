@@ -438,6 +438,7 @@ def train_func(config_path: str) -> None:
 
         stats_cpu = cast_dtype(stats_cpu, torch.float32)
         stats_gpu = move_to_device(stats_cpu, device)
+        if rank == 0: print("Entering training loop...", flush=True)
         while True:
             # --- Source A: Offline Data ---
             try:
@@ -448,6 +449,7 @@ def train_func(config_path: str) -> None:
                 offline_iter = iter(dataloader) # Restart epoch
                 offline_data = next(offline_iter)
 
+            if rank == 0: print(f"Got offline data batch", flush=True)
             # --- Source B: Online Data ---
             # Each GPU asks the buffer for data independently.
             # Since the buffer is random, it's okay if they sample independently.
@@ -455,8 +457,10 @@ def train_func(config_path: str) -> None:
             future = replay_buffer.sample.remote(batch_size=config.data.batch_size)
             online_data = ray.get(future)
             online_data = {k: online_data[k] for k in online_data.keys()}
+            if rank == 0: print(f"Got online data from replay buffer", flush=True)
             _dist_barrier(enable_dist_train, local_rank) # wait until all the other workers have gotten the online data
-            
+            if rank == 0: print(f"Passed training loop barrier", flush=True)
+
             if 'base_policy_action' in online_data.keys():
                 offline_data['base_policy_action'] = offline_data['action'].detach().clone()
                 
