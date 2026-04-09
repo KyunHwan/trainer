@@ -426,7 +426,8 @@ def train_func(config_path: str) -> None:
         replay_buffer_size = 0
         while replay_buffer_size < config.data.batch_size * 2 * world_size:
             replay_buffer_size = ray.get(replay_buffer.size.remote())
-            time.sleep(1.0)
+            print(f"Updated replay buffer size: {replay_buffer_size}")
+            time.sleep(0.5)
             
         if rank == 0:
             print("replay buffer has been filled!")
