@@ -53,7 +53,7 @@ class Critic_Trainer(nn.Module):
                 'action': future_action.unsqueeze(1)  # (B, 1, 24)
             }
 
-            future_val = self.q_target(data=future_data, subsample_q=True)
+            future_val = self.q_target(data=future_data, subsample_q=True, critic=False)
 
             # calculate TD n=3 target reward value
             # TD
