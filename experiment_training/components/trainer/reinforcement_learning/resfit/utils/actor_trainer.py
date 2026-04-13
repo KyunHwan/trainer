@@ -42,7 +42,8 @@ class Actor_Trainer(nn.Module):
         self.models['resfit_q_function'].eval()
         loss = -1.0 * self.models['resfit_q_function'](
             data=cur_input_data,
-            subsample_q=False
+            subsample_q=False,
+            critic=False
         )
 
         return loss.mean()
