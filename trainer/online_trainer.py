@@ -523,7 +523,7 @@ def train_func(config_path: str) -> None:
                     _record(loss_dict, iterations, num_iter_per_epoch)
                     # Need to check inside save_checkpoints if the models are wrapped by DDP
 
-                    if (iterations + 1) % config.train.save_every == 0:
+                    if (iterations + 1) % (config.train.save_every * 4) == 0:
                         _save_checkpoints(models=trainer.models, 
                                           optimizers=trainer.optimizers, 
                                           save_dir=config.train.save_dir, 
