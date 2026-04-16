@@ -133,7 +133,7 @@ def _build_models(world_size, global_rank, local_rank, enable_dist_train, config
     models = {"main": model} if not isinstance(model, dict) else model
     model_total_params = 0.0
     for k, policy in models.items():
-        if local_rank == 2: 
+        if local_rank == 0: 
             n_params_m = sum(p.numel() for p in policy.parameters()) / 1000000.0
             model_total_params += n_params_m
             print(f"Parameters of {k} model: {n_params_m:.1f} M")
@@ -173,7 +173,7 @@ def _build_models(world_size, global_rank, local_rank, enable_dist_train, config
         models[k] = ray.train.torch.prepare_model(model=policy, 
                                                   parallel_strategy_kwargs={"find_unused_parameters": find_unused_parameters})
 
-    if local_rank == 2: 
+    if local_rank == 0: 
         print(f"Total Parameters: {model_total_params:.1f} M")
 
     return nn.ModuleDict(models)
@@ -235,7 +235,7 @@ def _build_dataloader(config, world_rank=0, local_rank=0, world_size=0, enable_d
                 dataset = returned_product[key]
             elif key == 'norm_stats':
                 stats = returned_product[key]
-                if local_rank == 2:
+                if local_rank == 0:
                     # Construct the full path
                     save_dir = config.train.save_dir
                     stats_path = os.path.join(save_dir, "dataset_stats.pkl")
@@ -381,7 +381,7 @@ def train_func(config_path: str) -> None:
     device = ray.train.torch.get_device() 
     enable_dist_train = world_size > 1
 
-    if rank == 2:
+    if rank == 0:
         # Pass the config dictionary so you can filter by hyperparameters in the UI
         # You might need to add 'project_name' to your yaml schema, or hardcode it here
         project_name = config.data.datamodule.params["task_name"]
@@ -397,7 +397,7 @@ def train_func(config_path: str) -> None:
     base_seed = getattr(config.train, "seed", 0)
     set_global_seed(seed=base_seed)
 
-    if rank == 2: print(f"Global batch size = {config.data.batch_size * world_size}")
+    if rank == 0: print(f"Global batch size = {config.data.batch_size * world_size}")
 
     trainer = _build_trainer(world_size, rank, local_rank, enable_dist_train, config, device)
     _dist_barrier(enable_dist_train, local_rank)
@@ -424,21 +424,21 @@ def train_func(config_path: str) -> None:
         policy_state_manager = ray.get_actor("policy_state_manager")
 
         replay_buffer_size = 0
-        if rank == 2: print("Going into getting buffer...", flush=True)
+        if rank == 0: print("Going into getting buffer...", flush=True)
         while replay_buffer_size < config.data.batch_size * 2 * world_size:
             replay_buffer_size = ray.get(replay_buffer.size.remote())
-            if rank == 2: print(f"replay buffer size: {replay_buffer_size}", flush=True)
+            if rank == 0: print(f"replay buffer size: {replay_buffer_size}", flush=True)
             time.sleep(0.5)
         
-        if rank == 2: print("Replay buffer has been filled!", flush=True)
+        if rank == 0: print("Replay buffer has been filled!", flush=True)
 
         _dist_barrier(enable_dist_train, local_rank)
 
-        if rank == 2: print("Passed distributed barrier...", flush=True)
+        if rank == 0: print("Passed distributed barrier...", flush=True)
 
         stats_cpu = cast_dtype(stats_cpu, torch.float32)
         stats_gpu = move_to_device(stats_cpu, device)
-        if rank == 2: print("Entering training loop...", flush=True)
+        if rank == 0: print("Entering training loop...", flush=True)
         while True:
             # --- Source A: Offline Data ---
             try:
@@ -449,7 +449,7 @@ def train_func(config_path: str) -> None:
                 offline_iter = iter(dataloader) # Restart epoch
                 offline_data = next(offline_iter)
 
-            if rank == 2: print(f"Got offline data batch", flush=True)
+            if rank == 0: print(f"Got offline data batch", flush=True)
             # --- Source B: Online Data ---
             # Each GPU asks the buffer for data independently.
             # Since the buffer is random, it's okay if they sample independently.
@@ -457,16 +457,16 @@ def train_func(config_path: str) -> None:
             future = replay_buffer.sample.remote(batch_size=config.data.batch_size)
             online_data = ray.get(future)
             online_data = {k: online_data[k] for k in online_data.keys()}
-            if rank == 2: print(f"Got online data from replay buffer", flush=True)
+            if rank == 0: print(f"Got online data from replay buffer", flush=True)
             _dist_barrier(enable_dist_train, local_rank) # wait until all the other workers have gotten the online data
-            if rank == 2: print(f"Passed training loop barrier", flush=True)
+            if rank == 0: print(f"Passed training loop barrier", flush=True)
 
             if 'base_policy_action' in online_data.keys():
                 offline_data['base_policy_action'] = offline_data['action'].detach().clone()
                 
             shared_keys = offline_data.keys() & online_data.keys()
 
-            if rank == 2 and iterations == 0:
+            if rank == 0 and iterations == 0:
                 print([f"online == {key}: {online_data[key].shape}" for key in shared_keys])
                 print([f"offline == {key}: {offline_data[key].shape}" for key in shared_keys])
             
@@ -516,10 +516,10 @@ def train_func(config_path: str) -> None:
                 
                 
                 # combine online & offline data
-                if rank == 2: print(f"Train iter: {iterations}", flush=True)
+                if rank == 0: print(f"Train iter: {iterations}", flush=True)
                 loss_dict = trainer.train_step(data=data, stats=stats_gpu)
                 
-                if rank == 2:
+                if rank == 0:
                     _record(loss_dict, iterations, num_iter_per_epoch)
                     # Need to check inside save_checkpoints if the models are wrapped by DDP
 
@@ -548,13 +548,13 @@ def train_func(config_path: str) -> None:
             _dist_barrier(enable_dist_train, local_rank)
 
     except Exception as e:
-        if rank == 2:
+        if rank == 0:
             print(f"TRAINING ERROR at iteration {iterations}: {e}", flush=True)
             import traceback
             traceback.print_exc()
         raise
 
     finally:
-        if rank == 2:
+        if rank == 0:
             print("program terminating...", flush=True)
             wandb.finish()
