@@ -59,9 +59,9 @@ data:
 
 train:
   project_name: 'resfit_online_rl'
-  epoch: 500
+  epoch: 100000
   load_dir: null
-  save_every: 10
+  save_every: 20
   save_dir: "/home/user/Projects/online_rl/trainer/experiment_training/reinforcement_learning/resfit/online_rl"
   trainer:
     type: 'resfit_trainer'
