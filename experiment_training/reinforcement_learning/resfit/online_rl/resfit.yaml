@@ -51,7 +51,7 @@ data:
       obs_proprio_history: 1
       obs_images_history: 1
       HZ: 20
-  batch_size: 512
+  batch_size: 256
   num_workers: 12
   pin_memory: true
   persistent_workers: true
