@@ -23,8 +23,8 @@ params:
   output_img_channel: 24
   output_depth_channel: 24
   input_dim: 5808
-  num_ensemble: 3
-  num_layers: 3
+  num_ensemble: 10
+  num_layers: 4
   num_hidden_dim: 2048
   dropout: 0.0
   init_method: 'xavier'
