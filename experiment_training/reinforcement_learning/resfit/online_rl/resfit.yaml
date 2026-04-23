@@ -11,8 +11,8 @@ model:
     resfit_q_function:     "experiment_models/resfit/exp1/resfit_q_function.yaml"
 
   component_build_args:
-    resfit_residual_actor: { init: false, freeze: false }
-    resfit_q_function:     { init: false, freeze: false }
+    resfit_residual_actor: { init: false, freeze: false , online_update: true}
+    resfit_q_function:     { init: false, freeze: false , online_update: false}
 
   component_optims:
     resfit_residual_actor:

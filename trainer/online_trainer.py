@@ -534,7 +534,7 @@ def train_func(config_path: str) -> None:
 
                         # move the state dict to CPU to use ray.put, which works with CPU shared memory
                         for model_name in trainer.models.keys():
-                            if not config.model.component_build_args[model_name]['freeze']:
+                            if not config.model.component_build_args[model_name]['freeze'] and config.model.component_build_args[model_name]['online_update']:
                                 raw_model = unwrap_model(trainer.models[model_name])
                                 policy_components_weights[model_name] = {k: v.cpu() for k, v in raw_model.state_dict().items()}
                                 print(f"Iteration: {iterations} -- Model: {model_name} pushed from trainer", flush=True)
