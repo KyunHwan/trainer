@@ -1,6 +1,6 @@
 # Registry
 
-Registries map string keys to component classes and are the backbone of configuration-driven instantiation.
+This folder contains the registry system used by the framework to discover components by string key. For project-wide context, see [docs/README.md](../../docs/README.md).
 
 ## Purpose
 
@@ -8,59 +8,42 @@ Registries map string keys to component classes and are the backbone of configur
 - Define the four global registries that the training loop uses to discover components
 - Load user-defined plugin modules at startup to populate registries
 
-## How it fits into the pipeline
-
-When the training entrypoint loads a config, the `plugins` list is passed to `load_plugins()`, which imports each module. Those modules use `@REGISTRY.register("key")` decorators at module scope, making their components available for lookup by the training loop.
-
-## Key modules
+## Layout
 
 | File | Description |
 |------|-------------|
 | [`core.py`](core.py) | `Registry[T]` — generic registry with `register(key)` decorator, `get(key)`, `has(key)`, `keys()`, and optional base-class enforcement via `expected_base` |
-| [`__init__.py`](__init__.py) | Instantiates the four global registries |
+| [`__init__.py`](__init__.py) | Instantiates the four global registries with their expected-base protocols |
 | [`plugins.py`](plugins.py) | `load_plugins(modules)` — imports each module path once via `importlib.import_module()`. Tracks already-loaded modules to prevent double-registration |
 
-## Global registries
+## Contracts
 
-Defined in [`__init__.py`](__init__.py):
+The four global registries defined in [`__init__.py`](__init__.py):
 
-| Registry | Expected base | Used for |
-|----------|---------------|----------|
-| `TRAINER_REGISTRY` | `Trainer` protocol | Training loop implementations |
-| `DATASET_BUILDER_REGISTRY` | `DatasetFactory` protocol | Dataset construction factories |
-| `OPTIMIZER_BUILDER_REGISTRY` | `OptimizerFactory` protocol | Optimizer construction factories |
-| `LOSS_BUILDER_REGISTRY` | `LossFactory` protocol | Loss function construction factories |
+| Registry | Expected base | Used for | Looked up via |
+|----------|---------------|----------|---------------|
+| `TRAINER_REGISTRY` | `Trainer` protocol | Training loop implementations | `train.trainer.type` |
+| `DATASET_BUILDER_REGISTRY` | `DatasetFactory` protocol | Dataset construction factories | `data.datamodule.type` |
+| `OPTIMIZER_BUILDER_REGISTRY` | `OptimizerFactory` protocol | Optimizer construction factories | Each entry's `type` in `model.component_optims` |
+| `LOSS_BUILDER_REGISTRY` | `LossFactory` protocol | Loss function construction factories | `train.loss.type` |
 
-## Common workflows
+Registration: `@<REGISTRY>.register("key")` on a class. Lookup: `<REGISTRY>.get("key")` returns the class (raises `KeyError` if missing).
 
-### Register a component
+Plugin loading is one-shot per process. Re-registration of the same key raises `KeyError`; this is intentional so that two plugins registering the same key produces a loud error rather than silent overwrite.
 
-```python
-from trainer.registry import TRAINER_REGISTRY
+## How to extend
 
-@TRAINER_REGISTRY.register("my_trainer")
-class MyTrainer:
-    def __init__(self, models, optimizers, loss, device): ...
-    def train_step(self, data, **kwargs) -> dict: ...
-```
+- Adding a new component type? Implement the appropriate protocol from [`../templates/`](../templates/) and register it. See [docs/07_extending.md](../../docs/07_extending.md).
+- Adding a new *category* of registry (e.g. for metrics, callbacks)? Add a new global `Registry[T]` instantiation in [`__init__.py`](__init__.py) with the appropriate `expected_base`, then have a consumer call `<REGISTRY>.get(...)` somewhere in the pipeline.
 
-### Load plugins from config
+## Cross-links
 
-```yaml
-plugins:
-  - "experiment_training.components.trainer.imitation_learning.vfp_single_expert.vfp_single_expert_trainer"
-  - "experiment_training.components.dataloader.lerobot_data"
-```
-
-These modules are imported by [`plugins.py`](plugins.py), triggering their `@register` decorators.
-
-## Extension points
-
-- Add new global registries in `__init__.py` for new component types
-- Any importable Python module can serve as a plugin — just use the registry decorator at module scope
+- Concepts: [docs/04_concepts.md § Registries](../../docs/04_concepts.md#registries) and [§ Plugins](../../docs/04_concepts.md#plugins)
+- Extending recipes: [docs/07_extending.md](../../docs/07_extending.md)
+- Hub: [docs/README.md](../../docs/README.md)
 
 ## Gotchas / invariants
 
-- Registering the same key twice raises `KeyError` — each key must be unique within a registry. See [`core.py:28-29`](core.py)
-- Base-class enforcement checks `issubclass` for types and `isinstance` for instances. See [`core.py:44-57`](core.py)
-- Plugin modules are imported exactly once per process. The `_LOADED_MODULES` set in [`plugins.py`](plugins.py) prevents re-imports
+- Registering the same key twice raises `KeyError`. See [`core.py`](core.py).
+- Base-class enforcement uses `issubclass(cls, expected_base)`. For `@runtime_checkable` protocols with method-only members (as the four template protocols are), this is a structural check that passes when the class declares matching method names.
+- Plugin modules are imported exactly once per process. The `_LOADED_MODULES` set in [`plugins.py`](plugins.py) prevents re-imports, which would otherwise re-run `@register` decorators and produce duplicate-key errors.

@@ -1,6 +1,6 @@
 # experiment_training
 
-Concrete experiment implementations that plug into the [`trainer/`](../trainer/) framework via the registry system. Contains registered trainers, data loaders, losses, and optimizers for imitation learning experiments, plus the YAML configs that drive them.
+This folder contains concrete experiment implementations that plug into the [`trainer/`](../trainer/) framework via the registry system. For project-wide context, see [docs/README.md](../docs/README.md).
 
 ## Purpose
 
@@ -8,9 +8,17 @@ Concrete experiment implementations that plug into the [`trainer/`](../trainer/)
 - Organize training YAML configs by experiment type and version
 - Serve as a reference for implementing new experiments
 
-## How it fits into the pipeline
+## Layout
 
-Modules in this package are listed in the `plugins` section of experiment YAML configs. When the training entrypoint calls `load_plugins()`, these modules are imported, triggering their `@register` decorators and making components available to the registry system.
+| Directory | Description |
+|---|---|
+| [`components/`](components/README.md) | Registered component implementations — the code that runs during training |
+| [`imitation_learning/`](imitation_learning/README.md) | Training YAML configs for imitation-learning experiments |
+| [`reinforcement_learning/`](reinforcement_learning/README.md) | Training YAML configs for reinforcement-learning experiments (resfit, dsrl_openpi) |
+
+## Contracts
+
+Modules in [`components/`](components/) are listed in the `plugins:` section of experiment YAML configs in [`imitation_learning/`](imitation_learning/) and [`reinforcement_learning/`](reinforcement_learning/). When the training entrypoint calls `load_plugins()`, these modules are imported, triggering their `@register` decorators and making components available to the registry system.
 
 ```yaml
 plugins:
@@ -20,61 +28,23 @@ plugins:
   - "experiment_training.components.loss.sinkhorn_knopp"
 ```
 
-## Structure
+## How to extend
 
-```
-experiment_training/
-├── components/              Registered component implementations
-│   ├── dataloader/          Dataset factories (LeRobot, episodic HDF5)
-│   ├── loss/                Loss functions (L2, Sinkhorn-Knopp OT, MoE gating)
-│   ├── optimizer/           Optimizer factories (AdamW+cosine, OneCycle, schedule-free)
-│   └── trainer/             Trainer implementations
-│       └── imitation_learning/   IL trainers by experiment type
-│
-├── imitation_learning/      Training YAML configs
-│   ├── vfp_single_expert/   VFP single-expert configs (exp1/, exp2/)
-│   ├── cfg_vqvae_flow_matching/
-│   ├── naive_flow_matching_policy/
-│   ├── variational_flow_matching_policy/
-│   └── mutual_information_estimator/
-│
-└── reinforcement_learning/  RL experiment configs (placeholder)
-```
+Adding a new experiment is a four-step process:
 
-## Key directories
+1. Implement a trainer in `components/trainer/<algo>/<name>/` (and any custom dataset/loss/optimizer if needed).
+2. Create model architecture configs in [`../experiment_models/<name>/`](../experiment_models/).
+3. Create a training YAML config in `<algo>/<name>/exp1/`.
+4. List the plugin module paths in the YAML.
 
-| Directory | Description |
-|-----------|-------------|
-| [`components/`](components/) | All registered implementations — the code that runs during training |
-| [`imitation_learning/`](imitation_learning/) | YAML configs that specify which components to use, model paths, hyperparameters, and training schedule |
+Detailed recipes per component type: [docs/07_extending.md](../docs/07_extending.md).
 
-## Common workflows
+## Cross-links
 
-### Run an existing experiment
-
-```bash
-python trainer/offline_trainer.py --train_config experiment_training/imitation_learning/vfp_single_expert/exp1/vfp_single_expert.yaml
-```
-
-### Create a new experiment variant
-
-1. Copy an existing experiment config (e.g., `vfp_single_expert/exp1/`) to a new `expN/` directory
-2. Modify hyperparameters, model config paths, or component types
-3. If using new model architectures, create corresponding configs in [`experiment_models/`](../experiment_models/)
-
-### Add a new experiment type
-
-1. Implement a trainer in `components/trainer/imitation_learning/<name>/`
-2. Implement any required custom data loaders, losses, or optimizers in the respective `components/` subdirectories
-3. Create model architecture configs in `experiment_models/<name>/`
-4. Create a training YAML config in `imitation_learning/<name>/exp1/`
-
-## Extension points
-
-- All components follow the protocol patterns defined in [`trainer/templates/`](../trainer/templates/)
-- New experiment types only need to register their components and provide a YAML config — the framework handles the rest
+- Component framework: [docs/04_concepts.md](../docs/04_concepts.md)
+- Hub: [docs/README.md](../docs/README.md)
 
 ## Gotchas / invariants
 
-- Plugin module paths must be importable from the project root (e.g., `experiment_training.components.dataloader.lerobot_data`)
-- Training YAML configs reference model architecture configs in [`experiment_models/`](../experiment_models/) via relative paths that are resolved against the project root
+- Plugin module paths must be importable from the project root (e.g., `experiment_training.components.dataloader.lerobot_data`).
+- Training YAML configs reference model architecture configs in [`../experiment_models/`](../experiment_models/) via relative paths that are resolved against the project root by `_build_models()`.

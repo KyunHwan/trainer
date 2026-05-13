@@ -1,6 +1,6 @@
 # Templates
 
-Protocol definitions that establish the contracts for all pluggable training components. Every registered component must satisfy one of these interfaces.
+This folder contains the `Protocol` definitions that establish contracts for every pluggable component. For project-wide context, see [docs/README.md](../../docs/README.md).
 
 ## Purpose
 
@@ -8,60 +8,36 @@ Protocol definitions that establish the contracts for all pluggable training com
 - Serve as reference skeletons for implementing custom components
 - Enable runtime type checking via `@runtime_checkable`
 
-## How it fits into the pipeline
+## Layout
 
-The training entrypoints ([`offline_trainer.py`](../offline_trainer.py), [`online_trainer.py`](../online_trainer.py)) use these protocols as type constraints. After constructing a component from the registry, the entrypoint checks `isinstance(obj, Protocol)` to verify the contract is satisfied.
-
-## Key modules
-
-| File | Protocol | Signature |
-|------|----------|-----------|
-| [`trainer.py`](trainer.py) | `Trainer` | `__init__(models: ModuleDict, optimizers: dict, loss: Module)` and `train_step(data: dict) -> dict` |
-| [`dataset.py`](dataset.py) | `DatasetFactory` | `build(**kwargs) -> dict` — returns `{"dataset": Dataset, "norm_stats": dict}` |
+| File | Protocol | Method signatures |
+|------|----------|-------------------|
+| [`trainer.py`](trainer.py) | `Trainer` | `__init__(models: nn.ModuleDict, optimizers: dict, loss: nn.Module)` and `train_step(data: dict, stats: Any) -> dict[str, Any]` |
+| [`dataset.py`](dataset.py) | `DatasetFactory` | `build(**kwargs) -> dict[str, Any]` |
 | [`loss.py`](loss.py) | `LossFactory` | `build() -> nn.Module` |
-| [`optim.py`](optim.py) | `OptimizerFactory` | `build(params: Iterable[Parameter]) -> torch.optim.Optimizer` |
+| [`optim.py`](optim.py) | `OptimizerFactory` | `build(params: Iterable[nn.Parameter]) -> torch.optim.Optimizer` |
 
-## Common workflows
+## Contracts
 
-### Implement a new trainer
+- All four protocols are `@runtime_checkable`. The framework verifies conformance with `isinstance(obj, Protocol)` after construction (currently only for `Trainer`, in `_build_trainer`).
+- `isinstance` against a runtime-checkable protocol checks method *names*, not signatures. A mismatch in parameters is only caught at call time.
+- **`Trainer.train_step` canonical call is `trainer.train_step(data=data, stats=stats_gpu)`** — these are the kwargs the framework actually passes from the loop. The protocol declaration in [`trainer.py`](trainer.py) reflects this signature.
+- **`Trainer.__init__` also receives `device`** in practice, even though the protocol declaration omits it. `instantiate` in [`utils/import_utils.py`](../utils/import_utils.py) filters constructor kwargs by signature; `device=...` is forwarded only when the constructor accepts it.
+- `DatasetFactory.build` receives `opt_params={'local_rank', 'dist_enabled', 'save_dir'}` and `params=<datamodule.params>` from the trainer. Return `{"dataset": Dataset, "norm_stats": dict}` (or just the dataset; the loop tolerates both).
+- `OptimizerFactory.build` receives a model's `parameters()` iterator. The factory is responsible for any scheduler integration; the loop calls only `optimizer.step()`.
 
-```python
-from trainer.registry import TRAINER_REGISTRY
+## How to extend
 
-@TRAINER_REGISTRY.register("my_trainer")
-class MyTrainer:
-    def __init__(self, models, optimizers, loss, device):
-        self.models = models
-        self.optimizers = optimizers
-        self.loss = loss
-        self.device = device
+See [docs/07_extending.md](../../docs/07_extending.md) for a recipe per protocol.
 
-    def train_step(self, data, **kwargs) -> dict:
-        # Forward pass, backward, optimizer step
-        # Return dict of metric names → scalar values for logging
-        return {"loss": loss_value.item()}
-```
+## Cross-links
 
-### Implement a new dataset factory
-
-```python
-from trainer.registry import DATASET_BUILDER_REGISTRY
-
-@DATASET_BUILDER_REGISTRY.register("my_dataset")
-class MyDatasetFactory:
-    def build(self, opt_params=None, params=None) -> dict:
-        dataset = ...  # build torch.utils.data.Dataset
-        stats = {"action": {"mean": [...], "std": [...]}}
-        return {"dataset": dataset, "norm_stats": stats}
-```
-
-## Extension points
-
-- All protocols use `@runtime_checkable`, so you can verify conformance at runtime with `isinstance()`
-- The `Trainer` protocol's `train_step` can accept additional keyword arguments (e.g., `epoch`, `total_epochs`, `iterations`) — the training loop passes these through
+- Protocol contracts: [docs/04_concepts.md § Protocols (templates)](../../docs/04_concepts.md#protocols-templates)
+- Trainer contract: [docs/04_concepts.md § The train_step contract](../../docs/04_concepts.md#the-train_step-contract)
+- Hub: [docs/README.md](../../docs/README.md)
 
 ## Gotchas / invariants
 
-- The `Trainer.train_step()` return dict is logged directly to WandB. Keys become metric names; values must be scalars or tensors that can be detached to scalars
-- `DatasetFactory.build()` receives `opt_params` with keys `local_rank`, `dist_enabled`, `save_dir` from the training loop. See [`offline_trainer.py:232-244`](../offline_trainer.py)
-- `OptimizerFactory.build(params)` receives the model's parameters iterator. The factory must return a fully configured optimizer (scheduler integration is the factory's responsibility if needed)
+- The `Trainer.train_step()` return dict is logged directly to wandb on rank 0. Tensor values must be scalar (the logger calls `.detach().item()`); non-scalar tensors raise.
+- `LossFactory.build()` returning an `nn.Module` causes the framework to call `.to(device)` on it. If you return something else, that move is skipped — check that your custom-loss object knows what device it's on.
+- The framework's `isinstance(obj, Protocol)` check happens *after* construction. A trainer class that lacks `train_step` will instantiate successfully and then fail the isinstance check with `TypeError: Constructed object does not match Trainer interface`.

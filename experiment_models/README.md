@@ -1,14 +1,41 @@
 # experiment_models
 
-Model architecture configurations for [policy_constructor](../policy_constructor/). Each YAML file defines a single model component (backbone, encoder, decoder, etc.) that is built into a `GraphModel` (PyTorch `nn.Module`) at training time.
+This folder contains model architecture configurations for [policy_constructor](../policy_constructor/). Each YAML file defines a single model component (backbone, encoder, decoder, etc.) that is built into a `GraphModel` (PyTorch `nn.Module`) at training time. For project-wide context, see [docs/README.md](../docs/README.md).
 
 ## Purpose
 
-- Define model architectures declaratively in YAML using the policy_constructor config schema
+- Define model architectures declaratively in YAML using the [policy_constructor config schema](../policy_constructor/model_constructor/config/)
 - Organize model configs by experiment type and version
 - Provide reusable component configs that can be mixed and matched across experiments
 
-## How it fits into the pipeline
+## Layout
+
+```
+experiment_models/
+├── vfp_single_expert/             VFP single-expert flow matching
+├── variational_flow_matching_policy/   VFP + MoE + VQVAE
+├── naive_flow_matching_policy/    Basic flow matching policy
+├── cfg_vqvae_flow_matching/       CFG-VQVAE flow matching
+├── mutual_information_estimator/  MI estimation
+├── resfit/                        ResFit residual policy components
+├── openpi_batched/                OpenPI batched-input components
+└── dsrl_openpi/                   DSRL with OpenPI base policy
+```
+
+Per-subfolder summaries:
+
+| Subfolder | Consumed by | One-line description |
+|---|---|---|
+| [`vfp_single_expert/`](vfp_single_expert/README.md) | `vfp_single_expert_trainer` (and `_depth` variant) | 3-camera flow-matching policy with transformer info embedder + causal transformer action decoder |
+| [`variational_flow_matching_policy/`](variational_flow_matching_policy/README.md) | `variational_flow_matching_policy_trainer` | VFP with MoE action decoder, VQVAE posterior/prior, gating network |
+| [`naive_flow_matching_policy/`](naive_flow_matching_policy/README.md) | `naive_flow_matching_policy_trainer` | Basic flow-matching policy without variational bottleneck |
+| [`cfg_vqvae_flow_matching/`](cfg_vqvae_flow_matching/README.md) | `cfg_vqvae_flow_matching_trainer_kot` | CFG-VQVAE flow-matching with K-OT regularization |
+| [`mutual_information_estimator/`](mutual_information_estimator/README.md) | `mutual_information_estimator_trainer` | State/action autoencoders for MI estimation |
+| [`resfit/`](resfit/README.md) | `resfit_trainer` (online RL) | Residual actor + Q-function over a frozen base policy |
+| [`openpi_batched/`](openpi_batched/README.md) | OpenPI batched trainer | OpenPI model with batched-input adapter |
+| [`dsrl_openpi/`](dsrl_openpi/README.md) | `dsrl_openpi_trainer` | OpenPI base + DSRL critics/actors over noise and latent spaces |
+
+## Contracts
 
 Training YAML configs reference these files via `model.component_config_paths`:
 
@@ -20,102 +47,25 @@ model:
     action_decoder: "experiment_models/vfp_single_expert/exp1/action_decoder.yaml"
 ```
 
-At training time, [`PolicyConstructorModelFactory`](../trainer/modeling/factories.py) calls `model_constructor.build_model(config_path)` for each entry, producing named `nn.Module` instances that are stored in an `nn.ModuleDict`.
+At training time, [`PolicyConstructorModelFactory`](../trainer/modeling/factories.py) calls `model_constructor.build_model(config_path)` for each entry, producing named `nn.Module` instances stored in an `nn.ModuleDict`.
 
-**Inputs:** Relative paths from training YAML configs (resolved against project root)
-**Outputs:** `nn.Module` instances via `model_constructor.build_model()`
+Each YAML in this tree follows the policy_constructor schema (declarative `params:` + `model.graph` with `modules`, `nodes`, `inputs`, `outputs`). The schema is defined in [`policy_constructor/model_constructor/config/`](../policy_constructor/model_constructor/config/) and documented in [`policy_constructor/README.md`](../policy_constructor/README.md). **This repository does not re-document that schema** — link, don't duplicate.
 
-## Structure
+## How to extend
 
-```
-experiment_models/
-├── vfp_single_expert/
-│   ├── exp1/                   Base VFP single-expert (3 cameras)
-│   │   ├── head_backbone.yaml      RadioV3 backbone (1024 + 3072 channels)
-│   │   ├── left_backbone.yaml      RadioV3 backbone (shared architecture)
-│   │   ├── right_backbone.yaml     RadioV3 backbone (shared architecture)
-│   │   ├── info_embedder.yaml      4-layer transformer encoder (d=512, 8 heads)
-│   │   ├── action_decoder.yaml     7-layer causal transformer decoder (d=512, 8 heads)
-│   │   ├── vae_posterior.yaml      5-layer transformer (d=768, 16 heads, CLS tokens)
-│   │   ├── vae_prior.yaml          6-layer transformer (d=768, 16 heads)
-│   │   └── da3.yaml                Depth Anything v3 model
-│   └── exp2/                   VFP + depth estimation (4 visual inputs)
-│       ├── head_backbone.yaml
-│       ├── left_backbone.yaml
-│       ├── right_backbone.yaml
-│       ├── info_embedder.yaml      4 visual inputs (includes depth features)
-│       ├── action_decoder.yaml     8-layer transformer decoder
-│       ├── multimodal_bridge.yaml  Multimodal bridge with 4 visual inputs
-│       ├── vae_posterior.yaml
-│       ├── vae_prior.yaml
-│       └── da3.yaml
-│
-├── cfg_vqvae_flow_matching/
-│   └── exp1/                   CFG-VQVAE + flow matching
-│       ├── backbone.yaml
-│       ├── info_encoder.yaml
-│       ├── action_decoder.yaml
-│       ├── vqvae_posterior.yaml
-│       ├── vqvae_prior.yaml
-│       ├── vqvae_codebook.yaml
-│       ├── proprio_projector.yaml
-│       └── da3.yaml
-│
-├── naive_flow_matching_policy/
-│   └── exp1/                   Basic flow matching policy
-│       ├── backbone.yaml
-│       ├── info_embedder.yaml
-│       ├── action_decoder.yaml
-│       ├── proprio_projector.yaml
-│       ├── left_hand_extractor.yaml
-│       ├── right_hand_extractor.yaml
-│       └── da3.yaml
-│
-├── variational_flow_matching_policy/
-│   └── exp1/                   Variational flow matching with MoE
-│       ├── backbone.yaml
-│       ├── info_embedder.yaml
-│       ├── moe_action_decoder.yaml
-│       ├── proprio_projector.yaml
-│       ├── vqvae_posterior.yaml
-│       ├── vqvae_prior.yaml
-│       ├── vqvae_codebook.yaml
-│       ├── gate.yaml
-│       ├── left_hand_extractor.yaml
-│       ├── right_hand_extractor.yaml
-│       └── da3.yaml
-│
-└── mutual_information_estimator/
-    └── exp1/                   MI estimation
-        ├── action_encoder.yaml
-        ├── action_decoder.yaml
-        ├── state_resnet34_encoder.yaml
-        └── state_resnet34_decoder.yaml
-```
+Two scenarios:
 
-## Common workflows
+1. **A new variant of an existing experiment.** Copy `vfp_single_expert/exp1/` to `vfp_single_expert/exp3/`, adjust hyperparameters (layer counts, hidden dims, attention heads), and reference the new paths from a training YAML in [`../experiment_training/imitation_learning/`](../experiment_training/imitation_learning/).
+2. **A new experiment type.** Create a new top-level subfolder, define one YAML per model component using the policy_constructor schema, then create the matching trainer in [`../experiment_training/components/trainer/`](../experiment_training/components/trainer/) and a training config in [`../experiment_training/imitation_learning/`](../experiment_training/imitation_learning/) (or `reinforcement_learning/`).
 
-### Create a new experiment variant
+## Cross-links
 
-1. Copy an existing experiment directory (e.g., `vfp_single_expert/exp1/`) to a new `expN/`
-2. Modify architecture parameters (layer count, hidden dimensions, attention heads, etc.)
-3. Reference the new paths in a training YAML config in [`experiment_training/imitation_learning/`](../experiment_training/imitation_learning/)
-
-### Add a new experiment type
-
-1. Create a new directory under `experiment_models/` matching your experiment name
-2. Define a YAML file for each model component using the [policy_constructor config schema](../policy_constructor/model_constructor/config/)
-3. Create a corresponding trainer in [`experiment_training/components/trainer/`](../experiment_training/components/trainer/)
-4. Create a training config in [`experiment_training/imitation_learning/`](../experiment_training/imitation_learning/)
-
-## Extension points
-
-- Model architecture complexity is controlled entirely by YAML — no code changes needed for new architectures
-- Components can be shared across experiments (e.g., the same `da3.yaml` depth model appears in multiple experiments)
-- Per-component `init`/`freeze` flags in the training config control whether each model is initialized from scratch, loaded from a checkpoint, or frozen
+- policy_constructor schema: [`policy_constructor/README.md`](../policy_constructor/README.md) and [`policy_constructor/model_constructor/config/`](../policy_constructor/model_constructor/config/)
+- Model factory: [`trainer/modeling/`](../trainer/modeling/README.md)
+- Hub: [docs/README.md](../docs/README.md)
 
 ## Gotchas / invariants
 
-- Config paths are relative to the project root and resolved at training time by [`_build_models()`](../trainer/offline_trainer.py). Absolute paths are also supported
-- Each YAML file defines a single model component — the trainer is responsible for orchestrating the interaction between components
-- Model configs use the policy_constructor registry to reference block types (e.g., `vfp_single_action_decoder`, `RadioV3`). These blocks must be registered before model construction
+- Config paths are relative to the project root and resolved at training time by [`_build_models()`](../trainer/offline_trainer.py). Absolute paths are also supported.
+- Each YAML file defines a single model component — the trainer is responsible for orchestrating the interaction between components.
+- Model configs use the policy_constructor registry to reference block types (e.g., `vfp_single_action_decoder`, `radiov3`). These blocks must be registered before model construction (the submodule does this at import time).

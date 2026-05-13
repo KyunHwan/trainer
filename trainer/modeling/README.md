@@ -1,47 +1,39 @@
 # Modeling
 
-Model construction adapter that bridges the trainer framework with [policy_constructor](../../policy_constructor/).
+This folder contains the model-construction adapter that bridges the trainer framework with [policy_constructor](../../policy_constructor/). For project-wide context, see [docs/README.md](../../docs/README.md).
 
 ## Purpose
 
-- Provide a `ModelFactory` protocol for building PyTorch modules from config
+- Provide a `ModelFactory` protocol for building PyTorch modules from a config dict
 - Implement `PolicyConstructorModelFactory` which calls `model_constructor.build_model()` for each component
 
-## How it fits into the pipeline
-
-Called by `_build_models()` in [`offline_trainer.py`](../offline_trainer.py) and [`online_trainer.py`](../online_trainer.py). Receives the `model.component_config_paths` dict from the experiment config, builds each named model component, and returns them for DDP wrapping and optimizer binding.
-
-**Inputs:** Dict of `{component_name: config_path}` from `model.component_config_paths`
-**Outputs:** Dict of `{component_name: nn.Module}` (GraphModel instances from policy_constructor)
-
-## Key modules
+## Layout
 
 | File | Description |
 |------|-------------|
-| [`factories.py`](factories.py) | `ModelFactory` protocol and `PolicyConstructorModelFactory`. Supports three build modes: (1) single model via `config_path` key, (2) inline config via `config` key, (3) multiple named components via individual keys (the standard experiment pattern) |
+| [`factories.py`](factories.py) | `ModelFactory` protocol and `PolicyConstructorModelFactory`. Supports three build modes: (1) single model via `config_path` key, (2) inline config via `config` key, (3) **multiple named components via individual keys** (the standard experiment pattern — input is `{name: yaml_path}`, output is `{name: nn.Module}`) |
 
-## Common workflows
+## Contracts
 
-### Build models from an experiment config
+`PolicyConstructorModelFactory.build(model_cfg)`:
 
-The standard pattern uses `component_config_paths` to define multiple named model components:
+- If `model_cfg` has a `"config_path"` key → return `build_model(model_cfg["config_path"])` — a single `nn.Module`.
+- Else if `model_cfg` has a `"config"` key → return `build_model(model_cfg["config"])` — a single `nn.Module` from an inline dict.
+- Else (the standard experiment case) → iterate the dict, call `build_model(v)` for each value, return `{k: nn.Module}` keyed by component name.
 
-```yaml
-model:
-  component_config_paths:
-    head_backbone: "experiment_models/vfp_single_expert/exp1/head_backbone.yaml"
-    info_embedder: "experiment_models/vfp_single_expert/exp1/info_embedder.yaml"
-    action_decoder: "experiment_models/vfp_single_expert/exp1/action_decoder.yaml"
-```
+The training entrypoints always use case (3): they call `_build_models` which passes `config.model.component_config_paths.as_dict()` (after resolving relative paths against the project root) into `factory.build(...)`.
 
-Each path points to a [policy_constructor YAML config](../../policy_constructor/model_constructor/config/) that declaratively defines the model architecture.
+## How to extend
 
-## Extension points
+The factory is instantiated directly inside `_build_models` (no registry indirection); swap in a different factory by editing the entrypoint. If you want to support a different model-construction backend (e.g. an OmegaConf-driven one), implement the `ModelFactory` protocol and plug it in there.
 
-- Implement a different `ModelFactory` to support alternative model construction backends
-- The factory is instantiated in the trainer entrypoints — swap it by modifying `_build_models()`
+## Cross-links
+
+- Concepts: [docs/04_concepts.md § Factories](../../docs/04_concepts.md#factories) and [§ The nn.ModuleDict convention](../../docs/04_concepts.md#the-nnmoduledict-convention)
+- Submodule schema: [`policy_constructor/README.md`](../../policy_constructor/README.md) and `policy_constructor/model_constructor/config/` (do not re-document its schema here)
+- Hub: [docs/README.md](../../docs/README.md)
 
 ## Gotchas / invariants
 
-- `PolicyConstructorModelFactory` adds `policy_constructor/` to `sys.path` at import time if `model_constructor` is not already importable. See [`factories.py:12-17`](factories.py)
-- Relative config paths in `component_config_paths` are resolved against the project root (parent of `trainer/`). See [`offline_trainer.py:146-153`](../offline_trainer.py)
+- If `model_constructor` is not importable, `factories.py` falls back to adding `policy_constructor/` to `sys.path` at import time. So the submodule just needs to be present on disk for the factory to work.
+- Relative config paths in `component_config_paths` are resolved against the project root (parent of `trainer/`) by `_build_models()`, not against the working directory. Absolute paths are also supported and pass through unchanged.

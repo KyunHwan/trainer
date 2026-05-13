@@ -1,6 +1,6 @@
 # optimizer
 
-Optimizer factory implementations registered in `OPTIMIZER_BUILDER_REGISTRY`. Each factory's `build(params)` method receives model parameters and returns a configured `torch.optim.Optimizer`.
+This folder contains optimizer factory implementations registered in `OPTIMIZER_BUILDER_REGISTRY`. For project-wide context, see [docs/README.md](../../../docs/README.md).
 
 ## Purpose
 
@@ -8,70 +8,48 @@ Optimizer factory implementations registered in `OPTIMIZER_BUILDER_REGISTRY`. Ea
 - Integrate scheduler stepping inside the optimizer (no separate scheduler step needed in the training loop)
 - Support checkpoint save/load of both optimizer and scheduler state
 
-## How it fits into the pipeline
-
-The training entrypoint calls `_build_optimizers()` which iterates over `model.component_optims` — each model component gets its own optimizer. The factory is looked up by type key, instantiated with the params, and `build(model.parameters())` is called.
-
-**Inputs:** `component_optims[name].type` and `.params` from config, plus model parameters
-**Outputs:** `torch.optim.Optimizer` (with integrated scheduler)
-
-## Key modules
+## Layout
 
 | File | Registry key | Description |
 |------|-------------|-------------|
-| [`adamw_cosine_decay.py`](adamw_cosine_decay.py) | `adamw_warmup_cosine_decay` | `AdamWWithWarmupCosine` — AdamW with a linear warmup → cosine decay schedule. Scheduler steps inside `optimizer.step()`. Saves/loads scheduler state within the optimizer state dict |
+| [`adamw_cosine_decay.py`](adamw_cosine_decay.py) | `adamw_warmup_cosine_decay` | `AdamWWithWarmupCosine` — AdamW with a linear warmup → cosine decay schedule. Scheduler steps inside `optimizer.step()`. Scheduler state lives under `"scheduler"` in the optimizer's `state_dict()` |
 | [`adamw_onecyclelr.py`](adamw_onecyclelr.py) | `adamw_cosine_schedule` | `AdamWWithOneCycle` — AdamW with PyTorch's `OneCycleLR` schedule integrated. Same step-inside-step pattern |
 | [`schedule_free_radam.py`](schedule_free_radam.py) | `schedule_free_radam` | Factory wrapping `schedulefree.RAdamScheduleFree` from the [schedulefree](https://github.com/facebookresearch/schedule_free) library |
 
-## Common workflows
+## Contracts
 
-### Use AdamW with warmup cosine decay
+Each factory implements `OptimizerFactory`:
 
-```yaml
-model:
-  component_optims:
-    info_embedder:
-      type: "adamw_warmup_cosine_decay"
-      params:
-        peak_lr: 1.0e-4
-        start_lr: 1.0e-6
-        end_lr: 1.0e-6
-        total_steps: 200000
-        warmup_steps: 2000
-        betas: [0.9, 0.999]
-        eps: 1.0e-8
-        weight_decay: 0.01
+```python
+@OPTIMIZER_BUILDER_REGISTRY.register("key")
+class MyOptimizerFactory:
+    def __init__(self, ...): ...
+    def build(self, params: Iterable[nn.Parameter]) -> torch.optim.Optimizer: ...
 ```
 
-Key params for `adamw_warmup_cosine_decay`:
-- `peak_lr` — maximum learning rate (reached at end of warmup)
-- `start_lr` — learning rate at step 0
-- `end_lr` — learning rate at the final step
-- `total_steps` — total number of optimizer updates
-- `warmup_steps` — steps for linear warmup from `start_lr` to `peak_lr`
+At runtime, `_build_optimizers` iterates `model.component_optims`: for each entry, looks up the factory by `type`, instantiates from `params`, calls `factory.build(models[name].parameters())`. The result is keyed by component name in the optimizer dict passed to the trainer.
 
-### Use AdamW with OneCycle
+## How to extend
 
-```yaml
-model:
-  component_optims:
-    backbone:
-      type: "adamw_cosine_schedule"
-      params:
-        lr: 1.0e-4
-        max_lr: 1.0e-3
-        total_steps: 100000
-        pct_start: 0.1
-```
+See [docs/07_extending.md § Recipe: a new optimizer](../../../docs/07_extending.md#recipe-a-new-optimizer).
 
-## Extension points
+If your optimizer bundles a scheduler:
 
-- Add new optimizer factories by implementing the `OptimizerFactory` protocol
-- The pattern of integrating schedulers inside the optimizer's `step()` keeps the training loop simple — it only calls `optimizer.step()`
+- Step the scheduler inside the optimizer's `step()` override.
+- Save the scheduler's `state_dict()` under the `"scheduler"` key inside the optimizer's `state_dict()`.
+- Restore the scheduler state in `load_state_dict()` after stripping the key.
+
+This pattern keeps the training loop free of scheduler bookkeeping — the loop only calls `optimizer.step()`.
+
+## Cross-links
+
+- Recipe: [docs/07_extending.md § Recipe: a new optimizer](../../../docs/07_extending.md#recipe-a-new-optimizer)
+- Resume semantics: [docs/08_checkpoints_and_resume.md](../../../docs/08_checkpoints_and_resume.md)
+- Hub: [docs/README.md](../../../docs/README.md)
 
 ## Gotchas / invariants
 
-- Schedulers are stepped inside `optimizer.step()`, so the training loop must **not** step a scheduler separately. See [`adamw_cosine_decay.py:453-457`](adamw_cosine_decay.py)
-- Optimizer state dicts include scheduler state under the `"scheduler"` key. `load_state_dict` restores both. See [`adamw_cosine_decay.py:459-470`](adamw_cosine_decay.py)
-- One optimizer is created per model component listed in `component_optims`. Frozen models (no trainable params) are skipped. See [`offline_trainer.py:199-222`](../../../trainer/offline_trainer.py)
-- `peak_lr` must be > 0, and `start_lr`/`end_lr` must be <= `peak_lr`. Validation is performed at construction time
+- Schedulers are stepped inside `optimizer.step()`, so the training loop must **not** step a scheduler separately.
+- Optimizer state dicts include scheduler state under the `"scheduler"` key. `load_state_dict` restores both.
+- One optimizer is created per model component listed in `component_optims`. Frozen models (no trainable params) are silently skipped — even if you list them in `component_optims`, no optimizer is built because `[p for p in models[name].parameters() if p.requires_grad]` is empty.
+- `peak_lr` must be > 0 and `start_lr`/`end_lr` must be ≤ `peak_lr` for `adamw_warmup_cosine_decay`. Validation happens at construction time.

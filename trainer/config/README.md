@@ -1,6 +1,6 @@
 # Config
 
-YAML-driven configuration system with composition support and Pydantic validation.
+This folder contains the YAML-driven configuration system with composition support and Pydantic validation. For project-wide context, see [docs/README.md](../../docs/README.md).
 
 ## Purpose
 
@@ -8,63 +8,34 @@ YAML-driven configuration system with composition support and Pydantic validatio
 - Validate configs against a typed Pydantic schema (`ExperimentConfig`)
 - Produce structured, actionable error messages when validation fails
 
-## How it fits into the pipeline
-
-Both entrypoints ([`offline_trainer.py`](../offline_trainer.py) and [`online_trainer.py`](../online_trainer.py)) call `load_config(path)` → `validate_config(raw)` as the first step. The resulting `ExperimentConfig` drives all subsequent component construction (models, data, trainer, optimizers, losses).
-
-**Inputs:** A YAML file path from the CLI (`--train_config`)
-**Outputs:** A validated `ExperimentConfig` Pydantic model
-
-## Key modules
+## Layout
 
 | File | Description |
 |------|-------------|
 | [`loader.py`](loader.py) | `load_config(path)` — recursive YAML loader. Supports `defaults: [{key: relative_path}]` for config composition. Resolves relative paths against the config file's directory. Deep-merges defaults before applying the current file's overrides |
-| [`schemas.py`](schemas.py) | Pydantic models: `ExperimentConfig` (root), `ModelConfig`, `DataConfig`, `TrainConfig`, `ComponentSpec` (`{type, params}`), `OptimizerParams`, `EMAConfig`, `CheckpointConfig`. All use `ConfigDict(extra="allow")` to permit additional fields |
+| [`schemas.py`](schemas.py) | Pydantic models: `ExperimentConfig` (root), `ModelConfig`, `DataConfig`, `TrainConfig`, `ComponentSpec` (`{type, params}`), `OptimizerParams`, `OptimizerSpec`, `ComponentConfigPaths`, `EMAConfig`, `CheckpointConfig`. Most use `ConfigDict(extra="allow")` to permit additional fields |
 | [`errors.py`](errors.py) | `ConfigError` and `ConfigValidationIssue` — structured error types that format Pydantic validation failures into readable messages with YAML paths |
 
-## Common workflows
+## Contracts
 
-### Create a new experiment config
+- `load_config(path)` returns a plain `dict`. `validate_config(raw)` turns it into a typed `ExperimentConfig` or raises `ConfigError`.
+- The loader's `defaults` composition is *bottom-up then overlay*: each entry is loaded, deep-merged onto the running result, then the current file's keys are deep-merged on top.
+- Cycles in `defaults` are detected via a stack and raise `ConfigLoadError`.
 
-Start from an existing config in [`experiment_training/imitation_learning/`](../../experiment_training/imitation_learning/) and modify the component references. The required top-level keys are:
+## How to extend
 
-```yaml
-plugins: [...]           # list of module paths to import
-model:
-  find_unused_parameters: false
-  component_config_paths: { ... }
-  component_build_args: { ... }
-  component_optims: { ... }
-data:
-  datamodule: { type: "...", params: { ... } }
-  batch_size: 60
-  num_workers: 12
-train:
-  trainer: { type: "...", params: { ... } }
-  loss: { type: "...", params: { ... } }
-  epoch: 100
-  save_dir: "~/checkpoints"
-  save_every: 5
-```
+Add new validated fields to `ExperimentConfig` or its sub-models. Fields use Pydantic `Field` with validators for constraints. See the existing `lr > 0`, `decay in (0, 1)`, `max_epochs > 0` validators in [`schemas.py`](schemas.py) for examples.
 
-### Use defaults composition
+When adding fields that the trainer entrypoints will actually read, declare them in the corresponding Pydantic model — don't rely on `extra="allow"`. See [docs/05_configuration.md § extra="allow" and undeclared fields](../../docs/05_configuration.md#extraallow-and-undeclared-fields) for why this matters.
 
-```yaml
-defaults:
-  - base: ./shared_base.yaml
-# overrides here take precedence over base
-train:
-  epoch: 200
-```
+## Cross-links
 
-## Extension points
-
-- Add new validated fields to `ExperimentConfig` or its sub-models. Fields use Pydantic `Field` with validators for constraints (e.g., `lr > 0`, `max_epochs > 0`)
-- The `ComponentSpec` pattern (`{type, params}`) is reused across trainers, losses, optimizers, schedulers, and data modules
+- Schema reference: [docs/05_configuration.md](../../docs/05_configuration.md)
+- Hub: [docs/README.md](../../docs/README.md)
 
 ## Gotchas / invariants
 
-- `ComponentSpec` uses `extra="allow"` so unknown keys in `params` are preserved and forwarded to the component constructor
-- The loader detects circular `defaults` references and raises `ConfigLoadError`
-- Relative paths in `defaults` entries are resolved against the directory of the config file that declares them, not the working directory
+- `ComponentSpec` uses `extra="allow"`, so unknown keys in `params` are preserved and forwarded to the component constructor via the `_filter_kwargs` machinery in [`utils/import_utils.py`](../utils/import_utils.py).
+- The loader detects circular `defaults` references and raises `ConfigLoadError`.
+- Relative paths in `defaults` entries are resolved against the directory of the config file that declares them, not the working directory.
+- `TrainConfig` declares many fields that the entrypoints do not read; the entrypoints read several fields via `extra="allow"` that `TrainConfig` does not declare. The full mapping is in [docs/05_configuration.md § Where each field is consumed](../../docs/05_configuration.md#where-each-field-is-consumed).
