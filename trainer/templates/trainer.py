@@ -15,5 +15,5 @@ class Trainer(Protocol):
                  optimizers: dict[str, torch.optim.Optimizer],
                  loss: nn.Module): ...
     
-    def train_step(self, data: dict[str, Any]) -> dict[str, Any]: 
+    def train_step(self, data: dict[str, Any], stats: Any) -> dict[str, Any]: 
         """ Should process data and return a dict of metrics/loss """
