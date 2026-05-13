@@ -1,8 +1,8 @@
 plugins:
-  - "trainer.experiment_training.components.dataloader.lerobot_data"
-  - "trainer.experiment_training.components.loss.sinkhorn_knopp"
-  - "trainer.experiment_training.components.optimizer.adamw_cosine_decay"
-  - "trainer.experiment_training.components.trainer.imitation_learning.vfp_single_expert.vfp_single_expert_trainer_depth"
+  - "experiment_training.components.dataloader.lerobot_data"
+  - "experiment_training.components.loss.sinkhorn_knopp"
+  - "experiment_training.components.optimizer.adamw_cosine_decay"
+  - "experiment_training.components.trainer.imitation_learning.vfp_single_expert.vfp_single_expert_trainer_depth"
 model:
   find_unused_parameters: true
   component_config_paths:
